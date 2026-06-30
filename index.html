@@ -287,6 +287,104 @@
       font-size: 16px;
     }
   }
+    /* Estilos específicos para tooltip de jogos futuros */
+  .tooltip-modern .tt-upcoming {
+    text-align: center;
+  }
+  .tooltip-modern .tt-upcoming .tt-badge {
+    color: var(--gold);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    display: block;
+  }
+  .tooltip-modern .tt-upcoming .tt-teams {
+    font-size: 18px;
+    font-weight: 300;
+    color: var(--text);
+    margin: 8px 0;
+    letter-spacing: 0.02em;
+  }
+  .tooltip-modern .tt-upcoming .tt-teams strong {
+    color: var(--gold);
+    font-weight: 700;
+    padding: 0 6px;
+  }
+  .tooltip-modern .tt-upcoming .tt-datetime {
+    color: var(--muted);
+    font-size: 12px;
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 6px 0 4px;
+  }
+  .tooltip-modern .tt-upcoming .tt-datetime span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .tooltip-modern .tt-upcoming .tt-stage {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+  }
+  .tooltip-modern .tt-upcoming .tt-venue {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  /* Animações suaves para o tooltip */
+  .tooltip-modern {
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    transform: translateY(2px);
+  }
+  .tooltip-modern.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Estilo para jogos ao vivo no tooltip */
+  .tooltip-modern .tt-live-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: #ff3b30;
+    border-radius: 50%;
+    animation: pulse 1s ease-in-out infinite;
+    margin-right: 4px;
+  }
+
+  /* Tooltip para mobile - ajuste de tamanho */
+  @media (max-width: 480px) {
+    .tooltip-modern {
+      min-width: 150px;
+      padding: 10px 12px;
+    }
+    .tooltip-modern .tt-upcoming .tt-teams {
+      font-size: 15px;
+    }
+    .tooltip-modern .tt-upcoming .tt-datetime {
+      font-size: 11px;
+      gap: 8px;
+    }
+    .tooltip-modern .tt-header {
+      font-size: 12px;
+    }
+    .tooltip-modern .tt-header img {
+      width: 22px;
+      height: 22px;
+    }
+    .tooltip-modern .tt-score {
+      font-size: 16px;
+    }
+  }
 </style>
 </head>
 <body>
@@ -600,26 +698,76 @@
       return g;
     }
 
-    function showTooltip(ev, team) {
-      const match = team._matchData || {};
-      tooltip.innerHTML = `
-        <div class="tt-header">
-          <img src="${team.logo || ''}" alt="${team.name}">
-          <span>${team.name}</span>
-          <span class="tt-vs">vs</span>
-          <img src="${match.opponent?.logo || ''}" alt="${match.opponent?.name || ''}">
-          <span>${match.opponent?.name || '—'}</span>
+    // Versão completa e otimizada do showTooltip
+function showTooltip(ev, team) {
+  const match = team._matchData || {};
+  const isUpcoming = match.isUpcoming || match.status === 'SCHEDULED' || match.status === 'TIMED';
+  const isLive = match.isLive || match.status === 'IN_PLAY' || match.status === 'LIVE';
+  const isFinished = match.isFinished || match.status === 'FINISHED';
+
+  let html = '';
+  
+  if (isUpcoming) {
+    // Tooltip para jogos futuros - limpo e informativo
+    html = `
+      <div class="tt-upcoming">
+        <span class="tt-badge">⏰ ${match.statusLabel || 'EM BREVE'}</span>
+        <div class="tt-teams">
+          ${match.homeName || '—'} <strong>vs</strong> ${match.awayName || '—'}
         </div>
-        <div class="tt-score">${match.score || '—'}</div>
-        <div class="tt-details">
-          <span>🏆 ${match.stage || 'Fase'}</span>
+        <div class="tt-datetime">
           <span>📅 ${match.date || '--/--'}</span>
           <span>🕘 ${match.time || '--:--'}</span>
-          ${match.status ? `<span class="status-badge status-${match.statusClass}">${match.statusLabel}</span>` : ''}
+          ${match.venue ? `<span>📍 ${match.venue}</span>` : ''}
         </div>
-      `;
-      tooltip.classList.add("visible");
-    }
+        <div class="tt-stage">${match.stage || 'Fase eliminatória'}</div>
+      </div>
+    `;
+  } else if (isLive) {
+    // Tooltip para jogos ao vivo
+    html = `
+      <div class="tt-header">
+        <span class="tt-live-indicator"></span>
+        <span style="color: #ff3b30; font-weight: 700; font-size: 11px;">AO VIVO</span>
+      </div>
+      <div class="tt-header" style="margin-top: 2px;">
+        <img src="${team.logo || ''}" alt="${team.name}">
+        <span>${team.name}</span>
+        <span class="tt-vs">vs</span>
+        <img src="${match.opponent?.logo || ''}" alt="${match.opponent?.name || ''}">
+        <span>${match.opponent?.name || '—'}</span>
+      </div>
+      <div class="tt-score">${match.score || '0 × 0'}</div>
+      <div class="tt-details">
+        <span>🏆 ${match.stage || 'Fase'}</span>
+        <span>📅 ${match.date || '--/--'}</span>
+        <span>🕘 ${match.time || '--:--'}</span>
+        ${match.venue ? `<span>📍 ${match.venue}</span>` : ''}
+      </div>
+    `;
+  } else if (isFinished) {
+    // Tooltip para jogos encerrados
+    html = `
+      <div class="tt-header">
+        <img src="${team.logo || ''}" alt="${team.name}">
+        <span>${team.name}</span>
+        <span class="tt-vs">vs</span>
+        <img src="${match.opponent?.logo || ''}" alt="${match.opponent?.name || ''}">
+        <span>${match.opponent?.name || '—'}</span>
+      </div>
+      <div class="tt-score">${match.score || '—'}</div>
+      <div class="tt-details">
+        <span>🏆 ${match.stage || 'Fase'}</span>
+        <span>📅 ${match.date || '--/--'}</span>
+        ${match.venue ? `<span>📍 ${match.venue}</span>` : ''}
+        <span style="color: #34c759;">✅ ENCERRADO</span>
+      </div>
+    `;
+  }
+
+  tooltip.innerHTML = html;
+  tooltip.classList.add("visible");
+}
 
     function updateLivePanel(data) {
       const matches = [];
@@ -776,15 +924,22 @@
           
           // Guardar dados do jogo para tooltip
           const matchData = {
-            opponent: decided ? (winnerIsHome ? m.away : m.home) : null,
-            score: decided ? `${m.score?.home ?? '?'} × ${m.score?.away ?? '?'}` : '—',
-            stage: round.label || `Fase ${ri + 1}`,
-            date: new Date(m.date).toLocaleDateString('pt-BR'),
-            time: new Date(m.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}),
-            status: m.status || 'SCHEDULED',
-            statusClass: m.status === 'FINISHED' ? 'finished' : (m.status === 'IN_PLAY' || m.status === 'LIVE' ? 'live' : 'upcoming'),
-            statusLabel: STATUS_LABELS[m.status] || m.status || 'EM BREVE'
-          };
+  opponent: decided ? (winnerIsHome ? m.away : m.home) : null,
+  homeName: m.home?.name || '—',
+  awayName: m.away?.name || '—',
+  score: decided ? `${m.score?.home ?? '?'} × ${m.score?.away ?? '?'}` : '—',
+  stage: round.label || `Fase ${ri + 1}`,
+  date: new Date(m.date).toLocaleDateString('pt-BR'),
+  time: new Date(m.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}),
+  status: m.status || 'SCHEDULED',
+  isUpcoming: ['SCHEDULED', 'TIMED'].includes(m.status),
+  isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(m.status),
+  isFinished: m.status === 'FINISHED',
+  statusClass: m.status === 'FINISHED' ? 'finished' : 
+               (['IN_PLAY', 'LIVE', 'PAUSED'].includes(m.status) ? 'live' : 'upcoming'),
+  statusLabel: STATUS_LABELS[m.status] || m.status || 'EM BREVE',
+  venue: m.venue || 'Estádio a definir'
+};
 
           const glowLevel = Math.min(ri + 1, GLOW_AMOUNT.length);
           const lineWidth = Math.min(ri + 1, LINE_WIDTH.length);
