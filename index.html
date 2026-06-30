@@ -159,51 +159,82 @@
       grad.appendChild(el("stop", { offset: "55%", "stop-color": "#15120a" }));
       grad.appendChild(el("stop", { offset: "100%", "stop-color": "#0b0b0c" }));
       defs.appendChild(grad);
+
+      const filter = el("filter", { id: "lineGlow", x: "-60%", y: "-60%", width: "220%", height: "220%" });
+      filter.appendChild(el("feGaussianBlur", { stdDeviation: 1.6, result: "blur" }));
+      const merge = el("feMerge", {});
+      merge.appendChild(el("feMergeNode", { in: "blur" }));
+      merge.appendChild(el("feMergeNode", { in: "SourceGraphic" }));
+      filter.appendChild(merge);
+      defs.appendChild(filter);
+
       svg.appendChild(defs);
       svg.appendChild(el("rect", { x: 0, y: 0, width: 1000, height: 1000, fill: "url(#glow)" }));
 
       // anéis de referência (sutis) por rodada
       LEVEL_R.forEach((r) => {
         svg.appendChild(
-          el("circle", { cx: CX, cy: CY, r, fill: "none", stroke: "#222226", "stroke-width": 1 })
+          el("circle", { cx: CX, cy: CY, r, fill: "none", stroke: "#1c1c1f", "stroke-width": 1 })
         );
       });
     }
 
     function drawTrophy() {
       const g = el("g", {});
-      g.appendChild(el("circle", { cx: CX, cy: CY, r: 56, fill: "#0b0b0c", stroke: "#3a2c0c", "stroke-width": 2 }));
-      const t = el("text", {
-        x: CX, y: CY + 8, "text-anchor": "middle",
-        "font-size": 40, fill: "var(--gold)",
+      g.appendChild(
+        el("circle", { cx: CX, cy: CY, r: 62, fill: "#0b0b0c", stroke: "#3a2c0c", "stroke-width": 2 })
+      );
+      const size = 76;
+      g.appendChild(
+        el("image", {
+          x: CX - size / 2,
+          y: CY - size / 2,
+          width: size,
+          height: size,
+          href: "/taca.png",
+          preserveAspectRatio: "xMidYMid meet",
+          style: "filter: drop-shadow(0 0 10px rgba(217,165,49,.55))",
+        })
+      );
+      svg.appendChild(g);
+    }
+
+    // Conecta dois nós que estão no MESMO raio (rOuter) — um em angleA, outro
+    // em angleB — até um nó filho em (rInner, childAngle). Forma o clássico
+    // "L" que converge: desce em linha reta até o raio do meio, faz um arco
+    // ligando os dois lados, e desce de novo até o nó da rodada seguinte.
+    function connector(rOuter, angleA, angleB, rMid, childAngle, rInner, color, glow) {
+      const g = el("g", {
+        fill: "none",
+        stroke: color,
+        "stroke-width": glow ? 2.4 : 1.6,
+        "stroke-linecap": "round",
+        "stroke-linejoin": "round",
+        opacity: glow ? 1 : 0.55,
       });
-      t.textContent = "🏆";
-      g.appendChild(t);
-      svg.appendChild(g);
-    }
+      if (glow) g.setAttribute("filter", "url(#lineGlow)");
 
-    function connector(r1, a1, r2, a2, rMid, childAngle, rChild, color) {
-      const g = el("g", { fill: "none", stroke: color, "stroke-width": 2, "stroke-linecap": "round" });
-
-      const [x1, y1] = polar(r1, a1);
-      const [mx1, my1] = polar(rMid, a1);
-      const [x2, y2] = polar(r2, a2);
-      const [mx2, my2] = polar(rMid, a2);
+      const [x1, y1] = polar(rOuter, angleA);
+      const [mx1, my1] = polar(rMid, angleA);
+      const [x2, y2] = polar(rOuter, angleB);
+      const [mx2, my2] = polar(rMid, angleB);
       const [cmx, cmy] = polar(rMid, childAngle);
-      const [cx2, cy2] = polar(rChild, childAngle);
+      const [cx2, cy2] = polar(rInner, childAngle);
 
-      g.appendChild(el("path", { d: `M${x1},${y1} L${mx1},${my1}` }));
-      g.appendChild(el("path", { d: `M${x2},${y2} L${mx2},${my2}` }));
-      const large = Math.abs(a2 - a1) > 180 ? 1 : 0;
-      g.appendChild(el("path", { d: `M${mx1},${my1} A${rMid},${rMid} 0 ${large} 1 ${mx2},${my2}` }));
-      g.appendChild(el("path", { d: `M${cmx},${cmy} L${cx2},${cy2}` }));
+      const large = Math.abs(angleB - angleA) > 180 ? 1 : 0;
+      const d =
+        `M${x1},${y1} L${mx1},${my1} ` +
+        `A${rMid},${rMid} 0 ${large} 1 ${mx2},${my2} ` +
+        `M${mx2},${my2} L${x2},${y2} ` +
+        `M${cmx},${cmy} L${cx2},${cy2}`;
+      g.appendChild(el("path", { d }));
 
       svg.appendChild(g);
     }
 
-    function teamNode(team, r, angle, branchColor, pending) {
+    function teamNode(team, r, angle, branchColor, pending, size, glow) {
+      size = size || 30;
       const [x, y] = polar(r, angle);
-      const size = 30;
       const g = el("g", { class: "node", "data-x": x, "data-y": y });
 
       const clipId = "clip-" + Math.random().toString(36).slice(2);
@@ -213,9 +244,14 @@
       defs.appendChild(clip);
       g.appendChild(defs);
 
-      g.appendChild(
-        el("circle", { cx: x, cy: y, r: size / 2 + 2, fill: "#101012", stroke: pending ? GREY : branchColor, "stroke-width": 2 })
-      );
+      const ring = el("circle", {
+        cx: x, cy: y, r: size / 2 + 2.5,
+        fill: "#101012",
+        stroke: pending ? GREY : branchColor,
+        "stroke-width": pending ? 1.4 : 2.2,
+      });
+      if (glow && !pending) ring.setAttribute("filter", "url(#lineGlow)");
+      g.appendChild(ring);
 
       if (team && team.logo) {
         const img = el("image", {
@@ -297,7 +333,7 @@
           const branchIdx = decided ? (winnerIsHome ? a.branchIdx : b.branchIdx) : a.branchIdx;
           const color = decided ? BRANCH_COLORS[branchIdx] : GREY;
 
-          connector(r1, a.angle, r2, b.angle, rMid, childAngle, r2, color);
+          connector(r1, a.angle, b.angle, rMid, childAngle, r2, color, decided);
 
           newNodes.push({
             team: winnerTeam || { name: `${a.team?.name ?? "?"} / ${b.team?.name ?? "?"} — a definir`, logo: null },
