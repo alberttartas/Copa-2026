@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Copa do Mundo 2026 — Chave Automática</title>
+<style>
+  :root {
+    --bg: #0b0b0c;
+    --panel: #15151700;
+    --grey: #3c3c40;
+    --gold: #d9a531;
+    --text: #e9e6df;
+    --muted: #8a8a8f;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    text-align: center;
+    padding: 28px 16px 6px;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 20px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--gold);
+    font-weight: 600;
+  }
+  header p {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  #wrap {
+    width: min(94vw, 880px);
+    margin: 0 auto;
+    position: relative;
+  }
+  #stage {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .node-img {
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,.6));
+  }
+  .node-img.pending {
+    opacity: 0.32;
+  }
+  .ring-label {
+    fill: var(--muted);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  #status {
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted);
+    padding: 10px 0 28px;
+  }
+  #status button {
+    background: none;
+    border: 1px solid var(--grey);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 4px 10px;
+    margin-left: 8px;
+    cursor: pointer;
+    font-size: 11px;
+  }
+  #status button:hover { border-color: var(--gold); color: var(--gold); }
+  .err {
+    max-width: 560px;
+    margin: 20px auto;
+    padding: 14px 18px;
+    border: 1px solid #5b2a2a;
+    background: #1c1010;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #f3b7b7;
+  }
+  .tip {
+    position: absolute;
+    pointer-events: none;
+    background: #1c1c1f;
+    border: 1px solid #333;
+    color: var(--text);
+    font-size: 12px;
+    padding: 5px 9px;
+    border-radius: 6px;
+    transform: translate(-50%, -130%);
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity .12s;
+    z-index: 5;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>FIFA World Cup 2026</h1>
+    <p>Chave do mata-mata — atualizada automaticamente via API</p>
+  </header>
+
+  <div id="wrap">
+    <svg id="stage" viewBox="0 0 1000 1000"></svg>
+    <div class="tip" id="tip"></div>
+  </div>
+
+  <div id="status">
+    Carregando…
+    <button id="refreshBtn">Atualizar agora</button>
+  </div>
+
+  <script type="module">
+    const NS = "http://www.w3.org/2000/svg";
+    const CX = 500, CY = 500;
+    const POLL_MS = 90_000;
+
+    // raio (de fora pra dentro) de cada nível: folhas(32) -> R16 -> QF -> SF -> Final -> Campeão
+    const LEVEL_R = [460, 400, 338, 276, 214, 130];
+    const BRANCH_COLORS = [
+      "#e6484f", "#3ddc84", "#f0c23d", "#4ea1f7",
+      "#b768e0", "#ff9f53", "#2ec4b6", "#ff6f91",
+    ];
+    const GREY = "#3c3c40";
+
+    const svg = document.getElementById("stage");
+    const statusEl = document.getElementById("status");
+    const tip = document.getElementById("tip");
+
+    function el(tag, attrs) {
+      const n = document.createElementNS(NS, tag);
+      for (const k in attrs) n.setAttribute(k, attrs[k]);
+      return n;
+    }
+
+    function polar(r, angleDeg) {
+      const a = ((angleDeg - 90) * Math.PI) / 180;
+      return [CX + r * Math.cos(a), CY + r * Math.sin(a)];
+    }
+
+    function clear(node) {
+      while (node.firstChild) node.removeChild(node.firstChild);
+    }
+
+    function drawBackground() {
+      const defs = el("defs", {});
+      const grad = el("radialGradient", { id: "glow", cx: "50%", cy: "50%", r: "55%" });
+      grad.appendChild(el("stop", { offset: "0%", "stop-color": "#3a2c0c" }));
+      grad.appendChild(el("stop", { offset: "55%", "stop-color": "#15120a" }));
+      grad.appendChild(el("stop", { offset: "100%", "stop-color": "#0b0b0c" }));
+      defs.appendChild(grad);
+      svg.appendChild(defs);
+      svg.appendChild(el("rect", { x: 0, y: 0, width: 1000, height: 1000, fill: "url(#glow)" }));
+
+      // anéis de referência (sutis) por rodada
+      LEVEL_R.forEach((r) => {
+        svg.appendChild(
+          el("circle", { cx: CX, cy: CY, r, fill: "none", stroke: "#222226", "stroke-width": 1 })
+        );
+      });
+    }
+
+    function drawTrophy() {
+      const g = el("g", {});
+      g.appendChild(el("circle", { cx: CX, cy: CY, r: 56, fill: "#0b0b0c", stroke: "#3a2c0c", "stroke-width": 2 }));
+      const t = el("text", {
+        x: CX, y: CY + 8, "text-anchor": "middle",
+        "font-size": 40, fill: "var(--gold)",
+      });
+      t.textContent = "🏆";
+      g.appendChild(t);
+      svg.appendChild(g);
+    }
+
+    function connector(r1, a1, r2, a2, rMid, childAngle, rChild, color) {
+      const g = el("g", { fill: "none", stroke: color, "stroke-width": 2, "stroke-linecap": "round" });
+
+      const [x1, y1] = polar(r1, a1);
+      const [mx1, my1] = polar(rMid, a1);
+      const [x2, y2] = polar(r2, a2);
+      const [mx2, my2] = polar(rMid, a2);
+      const [cmx, cmy] = polar(rMid, childAngle);
+      const [cx2, cy2] = polar(rChild, childAngle);
+
+      g.appendChild(el("path", { d: `M${x1},${y1} L${mx1},${my1}` }));
+      g.appendChild(el("path", { d: `M${x2},${y2} L${mx2},${my2}` }));
+      const large = Math.abs(a2 - a1) > 180 ? 1 : 0;
+      g.appendChild(el("path", { d: `M${mx1},${my1} A${rMid},${rMid} 0 ${large} 1 ${mx2},${my2}` }));
+      g.appendChild(el("path", { d: `M${cmx},${cmy} L${cx2},${cy2}` }));
+
+      svg.appendChild(g);
+    }
+
+    function teamNode(team, r, angle, branchColor, pending) {
+      const [x, y] = polar(r, angle);
+      const size = 30;
+      const g = el("g", { class: "node", "data-x": x, "data-y": y });
+
+      const clipId = "clip-" + Math.random().toString(36).slice(2);
+      const defs = el("defs", {});
+      const clip = el("clipPath", { id: clipId });
+      clip.appendChild(el("circle", { cx: x, cy: y, r: size / 2 }));
+      defs.appendChild(clip);
+      g.appendChild(defs);
+
+      g.appendChild(
+        el("circle", { cx: x, cy: y, r: size / 2 + 2, fill: "#101012", stroke: pending ? GREY : branchColor, "stroke-width": 2 })
+      );
+
+      if (team && team.logo) {
+        const img = el("image", {
+          x: x - size / 2, y: y - size / 2, width: size, height: size,
+          href: team.logo, "clip-path": `url(#${clipId})`,
+          class: "node-img" + (pending ? " pending" : ""),
+          preserveAspectRatio: "xMidYMid slice",
+        });
+        g.appendChild(img);
+      } else {
+        g.appendChild(el("circle", { cx: x, cy: y, r: size / 2 - 4, fill: "#222226" }));
+      }
+
+      if (team && team.name) {
+        g.addEventListener("mousemove", (ev) => {
+          tip.textContent = team.name;
+          tip.style.left = ev.clientX + "px";
+          tip.style.top = ev.clientY + "px";
+          tip.style.opacity = 1;
+        });
+        g.addEventListener("mouseleave", () => (tip.style.opacity = 0));
+      }
+
+      svg.appendChild(g);
+    }
+
+    function render(data) {
+      clear(svg);
+      drawBackground();
+
+      const leaves = data.leaves || [];
+      const N = leaves.length;
+      if (N === 0) {
+        statusEl.innerHTML =
+          `Ainda sem confrontos de mata-mata publicados pela API para esta temporada. ` +
+          `(Confira <code>/api/rounds</code> pra ver os nomes de fase disponíveis.)`;
+        return;
+      }
+
+      const step = 360 / N;
+      // 8 "ramos" de 4 folhas cada, na ordem ao redor do círculo. branchIdx é
+      // herdado pelo vencedor em cada rodada — assim a linha colorida sempre
+      // representa "de qual oitavo do chaveamento esse time saiu", mesmo
+      // depois que ramos diferentes se cruzam nas rodadas mais internas.
+      const branchSize = N / 8;
+      let nodes = leaves.map((team, i) => ({
+        team,
+        angle: i * step,
+        decided: true, // folhas sempre "existem"
+        branchIdx: Math.floor(i / branchSize) % 8,
+      }));
+
+      // desenha folhas
+      nodes.forEach((n) => teamNode(n.team, LEVEL_R[0], n.angle, BRANCH_COLORS[n.branchIdx], false));
+
+      const rounds = data.rounds || [];
+      let level = 0;
+
+      for (let ri = 0; ri < rounds.length; ri++) {
+        const round = rounds[ri];
+        const r1 = LEVEL_R[level];
+        const r2 = LEVEL_R[level + 1];
+        const rMid = (r1 + r2) / 2;
+
+        const newNodes = [];
+        for (let i = 0; i < round.matches.length; i++) {
+          const m = round.matches[i];
+          const a = nodes[2 * i];
+          const b = nodes[2 * i + 1];
+          if (!a || !b) continue;
+
+          const childAngle = (a.angle + b.angle) / 2;
+          const winnerTeam =
+            m.winnerId != null
+              ? m.home.id === m.winnerId ? m.home : m.away
+              : null;
+          const decided = !!winnerTeam;
+          const winnerIsHome = decided && m.home.id === m.winnerId;
+          const branchIdx = decided ? (winnerIsHome ? a.branchIdx : b.branchIdx) : a.branchIdx;
+          const color = decided ? BRANCH_COLORS[branchIdx] : GREY;
+
+          connector(r1, a.angle, r2, b.angle, rMid, childAngle, r2, color);
+
+          newNodes.push({
+            team: winnerTeam || { name: `${a.team?.name ?? "?"} / ${b.team?.name ?? "?"} — a definir`, logo: null },
+            angle: childAngle,
+            decided,
+            branchIdx,
+          });
+        }
+
+        nodes = newNodes;
+        level += 1;
+
+        // desenha os nós resultantes desta rodada
+        nodes.forEach((n) => {
+          teamNode(n.team, LEVEL_R[level], n.angle, n.decided ? BRANCH_COLORS[n.branchIdx] : GREY, !n.decided);
+        });
+      }
+
+      drawTrophy();
+
+      const ts = new Date(data.updatedAt).toLocaleString("pt-BR");
+      statusEl.innerHTML = `Atualizado em ${ts} <button id="refreshBtn">Atualizar agora</button>`;
+      document.getElementById("refreshBtn").addEventListener("click", load);
+    }
+
+    async function load() {
+      statusEl.textContent = "Atualizando…";
+      try {
+        const res = await fetch("/api/bracket", { cache: "no-store" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Erro desconhecido");
+        render(data);
+      } catch (err) {
+        svg.innerHTML = "";
+        statusEl.innerHTML = `<div class="err">Não foi possível carregar o bracket: ${String(err.message || err)}</div>`;
+      }
+    }
+
+    document.getElementById("refreshBtn").addEventListener("click", load);
+    load();
+    setInterval(load, POLL_MS);
+  </script>
+</body>
+</html>
