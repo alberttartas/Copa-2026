@@ -7,11 +7,12 @@
 <style>
   :root {
     --bg: #0b0b0c;
-    --panel: #15151700;
+    --panel: rgba(21, 21, 23, 0.6);
     --grey: #3c3c40;
     --gold: #d9a531;
     --text: #e9e6df;
     --muted: #8a8a8f;
+    --glass: rgba(255, 255, 255, 0.05);
   }
   * { box-sizing: border-box; }
   html, body {
@@ -21,23 +22,132 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     min-height: 100vh;
   }
+
+  /* Header com efeito vidro */
   header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    background: var(--glass);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    padding: 12px 16px;
     text-align: center;
-    padding: 28px 16px 6px;
   }
   header h1 {
     margin: 0;
-    font-size: 20px;
+    font-size: 18px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--gold);
     font-weight: 600;
   }
   header p {
-    margin: 6px 0 0;
-    font-size: 12px;
+    margin: 4px 0 0;
+    font-size: 11px;
     color: var(--muted);
   }
+
+  /* Painel de informações ao vivo */
+  #livePanel {
+    max-width: 880px;
+    margin: 12px auto;
+    padding: 12px 20px;
+    background: var(--glass);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.06);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    font-size: 13px;
+  }
+  #livePanel .live-match {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  #livePanel .live-badge {
+    color: #ff3b30;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+  #livePanel .match-teams {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+  }
+  #livePanel .match-teams img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    border-radius: 50%;
+  }
+  #livePanel .match-score {
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--gold);
+    padding: 0 8px;
+  }
+  #livePanel .match-time {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  #livePanel .next-match {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+  #livePanel .next-badge {
+    color: var(--gold);
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  #livePanel .next-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  #livePanel .next-info .teams {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  #livePanel .next-info img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    border-radius: 50%;
+  }
+  #livePanel .next-info .date-time {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  #livePanel .status-badge {
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .status-live { background: #ff3b30; color: #fff; }
+  .status-finished { background: #34c759; color: #fff; }
+  .status-upcoming { background: #ff9500; color: #fff; }
+
   #wrap {
     width: min(94vw, 880px);
     margin: 0 auto;
@@ -48,18 +158,92 @@
     height: auto;
     display: block;
   }
+
+  /* Tamanhos dos nós por fase */
+  .node-r32 { --size: 28px; }
+  .node-r16 { --size: 34px; }
+  .node-qf { --size: 42px; }
+  .node-sf { --size: 52px; }
+  .node-final { --size: 66px; }
+  .node-champion { --size: 80px; }
+
   .node-img {
     filter: drop-shadow(0 1px 3px rgba(0,0,0,.6));
   }
   .node-img.pending {
     opacity: 0.32;
   }
+  .node-img.champion {
+    animation: championGlow 2s ease-in-out infinite;
+  }
+  @keyframes championGlow {
+    0%, 100% { filter: drop-shadow(0 0 20px rgba(217,165,49,0.6)); }
+    50% { filter: drop-shadow(0 0 40px rgba(217,165,49,0.9)); }
+  }
+
   .ring-label {
     fill: var(--muted);
     font-size: 9px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
+
+  /* Tooltip melhorado */
+  .tooltip-modern {
+    position: fixed;
+    pointer-events: none;
+    background: rgba(20, 20, 23, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 12px 16px;
+    min-width: 180px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 100;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+  }
+  .tooltip-modern.visible { opacity: 1; }
+  .tooltip-modern .tt-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 6px;
+  }
+  .tooltip-modern .tt-header img {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    border-radius: 50%;
+  }
+  .tooltip-modern .tt-vs {
+    color: var(--muted);
+    font-weight: 400;
+    padding: 0 4px;
+  }
+  .tooltip-modern .tt-score {
+    color: var(--gold);
+    font-weight: 700;
+    font-size: 18px;
+    margin: 4px 0;
+  }
+  .tooltip-modern .tt-details {
+    color: var(--muted);
+    font-size: 11px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+  .tooltip-modern .tt-details span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
   #status {
     text-align: center;
     font-size: 11px;
@@ -71,10 +255,11 @@
     border: 1px solid var(--grey);
     color: var(--text);
     border-radius: 6px;
-    padding: 4px 10px;
+    padding: 4px 12px;
     margin-left: 8px;
     cursor: pointer;
     font-size: 11px;
+    transition: all 0.2s;
   }
   #status button:hover { border-color: var(--gold); color: var(--gold); }
   .err {
@@ -87,32 +272,57 @@
     font-size: 13px;
     color: #f3b7b7;
   }
-  .tip {
-    position: absolute;
-    pointer-events: none;
-    background: #1c1c1f;
-    border: 1px solid #333;
-    color: var(--text);
-    font-size: 12px;
-    padding: 5px 9px;
-    border-radius: 6px;
-    transform: translate(-50%, -130%);
-    white-space: nowrap;
-    opacity: 0;
-    transition: opacity .12s;
-    z-index: 5;
+
+  @media (max-width: 640px) {
+    #livePanel {
+      grid-template-columns: 1fr;
+      gap: 10px;
+      padding: 10px 14px;
+      font-size: 12px;
+    }
+    #livePanel .next-match {
+      justify-content: flex-start;
+    }
+    #livePanel .match-score {
+      font-size: 16px;
+    }
   }
 </style>
 </head>
 <body>
   <header>
-    <h1>FIFA World Cup 2026</h1>
+    <h1>🏆 FIFA World Cup 2026</h1>
     <p>Chave do mata-mata — atualizada automaticamente via API</p>
   </header>
 
+  <!-- Painel Ao Vivo / Próximo Jogo -->
+  <div id="livePanel">
+    <div class="live-match">
+      <span class="live-badge">● AO VIVO</span>
+      <span class="match-teams" id="liveTeams">
+        <img src="" alt=""> <span id="liveHome">—</span>
+        <span class="match-score" id="liveScore">vs</span>
+        <span id="liveAway">—</span> <img src="" alt="">
+      </span>
+      <span class="match-time" id="liveTime"></span>
+      <span class="status-badge status-live" id="liveStatus">AO VIVO</span>
+    </div>
+    <div class="next-match">
+      <span class="next-badge">⏰ PRÓXIMO</span>
+      <div class="next-info">
+        <span class="teams" id="nextTeams">
+          <img src="" alt=""> <span id="nextHome">—</span>
+          <span style="color:var(--muted)">vs</span>
+          <span id="nextAway">—</span> <img src="" alt="">
+        </span>
+        <span class="date-time" id="nextDateTime">📅 --/-- • 🕘 --:--</span>
+      </div>
+    </div>
+  </div>
+
   <div id="wrap">
     <svg id="stage" viewBox="0 0 1000 1000"></svg>
-    <div class="tip" id="tip"></div>
+    <div class="tooltip-modern" id="tooltip"></div>
   </div>
 
   <div id="status">
@@ -125,7 +335,13 @@
     const CX = 500, CY = 500;
     const POLL_MS = 90_000;
 
-    // raio (de fora pra dentro) de cada nível: folhas(32) -> R16 -> QF -> SF -> Final -> Campeão
+    // Tamanhos dos nós por nível (do mais externo ao centro)
+    const NODE_SIZE = [28, 34, 42, 52, 66, 80];
+    // Espessura das linhas por nível
+    const LINE_WIDTH = [1.2, 2, 3, 4, 5];
+    // Brilho por nível (blur)
+    const GLOW_AMOUNT = [4, 8, 14, 20, 26];
+
     const LEVEL_R = [460, 400, 338, 276, 214, 130];
     const BRANCH_COLORS = [
       "#e6484f", "#3ddc84", "#f0c23d", "#4ea1f7",
@@ -135,7 +351,33 @@
 
     const svg = document.getElementById("stage");
     const statusEl = document.getElementById("status");
-    const tip = document.getElementById("tip");
+    const tooltip = document.getElementById("tooltip");
+    const livePanel = document.getElementById("livePanel");
+
+    // Cores para status dos jogos
+    const STATUS_COLORS = {
+      'LIVE': '#ff3b30',
+      'FINISHED': '#34c759',
+      'SCHEDULED': '#ff9500',
+      'TIMED': '#ff9500',
+      'IN_PLAY': '#ff3b30',
+      'PAUSED': '#ff9500',
+      'SUSPENDED': '#ff9500',
+      'POSTPONED': '#ff9500',
+      'CANCELLED': '#8e8e93'
+    };
+
+    const STATUS_LABELS = {
+      'LIVE': 'AO VIVO',
+      'FINISHED': 'ENCERRADO',
+      'SCHEDULED': 'EM BREVE',
+      'TIMED': 'EM BREVE',
+      'IN_PLAY': 'AO VIVO',
+      'PAUSED': 'INTERVALO',
+      'SUSPENDED': 'SUSPENSO',
+      'POSTPONED': 'ADIADO',
+      'CANCELLED': 'CANCELADO'
+    };
 
     function el(tag, attrs) {
       const n = document.createElementNS(NS, tag);
@@ -154,36 +396,79 @@
 
     function drawBackground() {
       const defs = el("defs", {});
-      const grad = el("radialGradient", { id: "glow", cx: "50%", cy: "50%", r: "55%" });
-      grad.appendChild(el("stop", { offset: "0%", "stop-color": "#3a2c0c" }));
-      grad.appendChild(el("stop", { offset: "55%", "stop-color": "#15120a" }));
-      grad.appendChild(el("stop", { offset: "100%", "stop-color": "#0b0b0c" }));
+      
+      // Gradiente radial atrás da taça
+      const grad = el("radialGradient", { id: "bgGlow", cx: "50%", cy: "50%", r: "50%" });
+      grad.appendChild(el("stop", { offset: "0%", "stop-color": "#3a2c0c", "stop-opacity": "0.6" }));
+      grad.appendChild(el("stop", { offset: "30%", "stop-color": "#1c1508", "stop-opacity": "0.4" }));
+      grad.appendChild(el("stop", { offset: "100%", "stop-color": "#0b0b0c", "stop-opacity": "1" }));
       defs.appendChild(grad);
 
-      const filter = el("filter", { id: "lineGlow", x: "-60%", y: "-60%", width: "220%", height: "220%" });
-      filter.appendChild(el("feGaussianBlur", { stdDeviation: 1.6, result: "blur" }));
-      const merge = el("feMerge", {});
-      merge.appendChild(el("feMergeNode", { in: "blur" }));
-      merge.appendChild(el("feMergeNode", { in: "SourceGraphic" }));
-      filter.appendChild(merge);
-      defs.appendChild(filter);
+      // Filtros para glow (com intensidade variável)
+      for (let i = 0; i < GLOW_AMOUNT.length; i++) {
+        const filter = el("filter", { 
+          id: `glow-${i}`, 
+          x: "-60%", y: "-60%", width: "220%", height: "220%" 
+        });
+        filter.appendChild(el("feGaussianBlur", { stdDeviation: GLOW_AMOUNT[i], result: "blur" }));
+        const merge = el("feMerge", {});
+        merge.appendChild(el("feMergeNode", { in: "blur" }));
+        merge.appendChild(el("feMergeNode", { in: "SourceGraphic" }));
+        filter.appendChild(merge);
+        defs.appendChild(filter);
+      }
 
       svg.appendChild(defs);
-      svg.appendChild(el("rect", { x: 0, y: 0, width: 1000, height: 1000, fill: "url(#glow)" }));
+      svg.appendChild(el("rect", { x: 0, y: 0, width: 1000, height: 1000, fill: "url(#bgGlow)" }));
 
-      // anéis de referência (sutis) por rodada
+      // Anéis de referência sutis
       LEVEL_R.forEach((r) => {
         svg.appendChild(
-          el("circle", { cx: CX, cy: CY, r, fill: "none", stroke: "#1c1c1f", "stroke-width": 1 })
+          el("circle", { cx: CX, cy: CY, r, fill: "none", stroke: "#1c1c1f", "stroke-width": 0.5 })
         );
       });
     }
 
     function drawTrophy() {
       const g = el("g", {});
+      
+      // Círculo ao redor da taça
       g.appendChild(
         el("circle", { cx: CX, cy: CY, r: 62, fill: "#0b0b0c", stroke: "#3a2c0c", "stroke-width": 2 })
       );
+      
+      // Texto girando ao redor
+      const textGroup = el("g", {});
+      const textRadius = 78;
+      const label = "FINAL • 13 JUL • METLIFE STADIUM • NEW YORK • ";
+      for (let i = 0; i < label.length; i++) {
+        const angle = (i / label.length) * 360;
+        const [x, y] = polar(textRadius, angle);
+        const char = el("text", {
+          x, y,
+          "font-size": "8",
+          fill: "#8a8a8f",
+          "text-anchor": "middle",
+          "dominant-baseline": "central",
+          transform: `rotate(${angle + 90}, ${x}, ${y})`,
+          "letter-spacing": "2",
+        });
+        char.textContent = label[i];
+        textGroup.appendChild(char);
+      }
+      // Animação de rotação
+      const anim = el("animateTransform", {
+        attributeName: "transform",
+        type: "rotate",
+        from: "0 500 500",
+        to: "360 500 500",
+        dur: "40s",
+        repeatCount: "indefinite"
+      });
+      textGroup.appendChild(anim);
+      g.appendChild(textGroup);
+
+      // Taça
       const size = 76;
       g.appendChild(
         el("image", {
@@ -193,26 +478,26 @@
           height: size,
           href: "/taca.png",
           preserveAspectRatio: "xMidYMid meet",
-          style: "filter: drop-shadow(0 0 10px rgba(217,165,49,.55))",
+          style: "filter: drop-shadow(0 0 30px rgba(217,165,49,0.4))",
         })
       );
+      
       svg.appendChild(g);
     }
 
-    // Conecta dois nós que estão no MESMO raio (rOuter) — um em angleA, outro
-    // em angleB — até um nó filho em (rInner, childAngle). Forma o clássico
-    // "L" que converge: desce em linha reta até o raio do meio, faz um arco
-    // ligando os dois lados, e desce de novo até o nó da rodada seguinte.
-    function connector(rOuter, angleA, angleB, rMid, childAngle, rInner, color, glow) {
+    function connector(rOuter, angleA, angleB, rMid, childAngle, rInner, color, glowLevel, lineWidth) {
       const g = el("g", {
         fill: "none",
         stroke: color,
-        "stroke-width": glow ? 2.4 : 1.6,
+        "stroke-width": lineWidth || 1.6,
         "stroke-linecap": "round",
         "stroke-linejoin": "round",
-        opacity: glow ? 1 : 0.55,
+        opacity: glowLevel > 0 ? 1 : 0.45,
       });
-      if (glow) g.setAttribute("filter", "url(#lineGlow)");
+      if (glowLevel > 0) {
+        const idx = Math.min(glowLevel - 1, GLOW_AMOUNT.length - 1);
+        g.setAttribute("filter", `url(#glow-${idx})`);
+      }
 
       const [x1, y1] = polar(rOuter, angleA);
       const [mx1, my1] = polar(rMid, angleA);
@@ -232,10 +517,14 @@
       svg.appendChild(g);
     }
 
-    function teamNode(team, r, angle, branchColor, pending, size, glow) {
-      size = size || 30;
+    function teamNode(team, r, angle, branchColor, pending, size, glowLevel, isChampion) {
       const [x, y] = polar(r, angle);
-      const g = el("g", { class: "node", "data-x": x, "data-y": y });
+      const g = el("g", { 
+        class: "node", 
+        "data-x": x, 
+        "data-y": y,
+        style: `--size: ${size}px`
+      });
 
       const clipId = "clip-" + Math.random().toString(36).slice(2);
       const defs = el("defs", {});
@@ -244,20 +533,45 @@
       defs.appendChild(clip);
       g.appendChild(defs);
 
+      // Círculo com borda
       const ring = el("circle", {
         cx: x, cy: y, r: size / 2 + 2.5,
-        fill: "#101012",
-        stroke: pending ? GREY : branchColor,
-        "stroke-width": pending ? 1.4 : 2.2,
+        fill: pending ? "#101012" : "#151517",
+        stroke: pending ? GREY : (isChampion ? "#d9a531" : branchColor),
+        "stroke-width": isChampion ? 3 : (pending ? 1.4 : 2.2),
       });
-      if (glow && !pending) ring.setAttribute("filter", "url(#lineGlow)");
+      if (glowLevel > 0 && !pending) {
+        const idx = Math.min(glowLevel - 1, GLOW_AMOUNT.length - 1);
+        ring.setAttribute("filter", `url(#glow-${idx})`);
+      }
+      if (isChampion) {
+        ring.setAttribute("stroke", "#d9a531");
+        ring.setAttribute("stroke-width", "3");
+        // Animação de pulsação
+        const anim = el("animate", {
+          attributeName: "r",
+          values: `${size/2 + 2.5};${size/2 + 5};${size/2 + 2.5}`,
+          dur: "2s",
+          repeatCount: "indefinite"
+        });
+        ring.appendChild(anim);
+        const anim2 = el("animate", {
+          attributeName: "stroke-opacity",
+          values: "1;0.6;1",
+          dur: "2s",
+          repeatCount: "indefinite"
+        });
+        ring.appendChild(anim2);
+      }
       g.appendChild(ring);
 
+      // Logo do time
       if (team && team.logo) {
         const img = el("image", {
           x: x - size / 2, y: y - size / 2, width: size, height: size,
-          href: team.logo, "clip-path": `url(#${clipId})`,
-          class: "node-img" + (pending ? " pending" : ""),
+          href: team.logo, 
+          "clip-path": `url(#${clipId})`,
+          class: `node-img${pending ? " pending" : ""}${isChampion ? " champion" : ""}`,
           preserveAspectRatio: "xMidYMid slice",
         });
         g.appendChild(img);
@@ -265,17 +579,146 @@
         g.appendChild(el("circle", { cx: x, cy: y, r: size / 2 - 4, fill: "#222226" }));
       }
 
+      // Placar abaixo do escudo (se houver)
+      // Será adicionado pelo render
+
+      // Eventos de mouse para tooltip
       if (team && team.name) {
-        g.addEventListener("mousemove", (ev) => {
-          tip.textContent = team.name;
-          tip.style.left = ev.clientX + "px";
-          tip.style.top = ev.clientY + "px";
-          tip.style.opacity = 1;
+        g.addEventListener("mouseenter", (ev) => {
+          showTooltip(ev, team);
         });
-        g.addEventListener("mouseleave", () => (tip.style.opacity = 0));
+        g.addEventListener("mousemove", (ev) => {
+          tooltip.style.left = (ev.clientX + 16) + "px";
+          tooltip.style.top = (ev.clientY + 16) + "px";
+        });
+        g.addEventListener("mouseleave", () => {
+          tooltip.classList.remove("visible");
+        });
       }
 
       svg.appendChild(g);
+      return g;
+    }
+
+    function showTooltip(ev, team) {
+      const match = team._matchData || {};
+      tooltip.innerHTML = `
+        <div class="tt-header">
+          <img src="${team.logo || ''}" alt="${team.name}">
+          <span>${team.name}</span>
+          <span class="tt-vs">vs</span>
+          <img src="${match.opponent?.logo || ''}" alt="${match.opponent?.name || ''}">
+          <span>${match.opponent?.name || '—'}</span>
+        </div>
+        <div class="tt-score">${match.score || '—'}</div>
+        <div class="tt-details">
+          <span>🏆 ${match.stage || 'Fase'}</span>
+          <span>📅 ${match.date || '--/--'}</span>
+          <span>🕘 ${match.time || '--:--'}</span>
+          ${match.status ? `<span class="status-badge status-${match.statusClass}">${match.statusLabel}</span>` : ''}
+        </div>
+      `;
+      tooltip.classList.add("visible");
+    }
+
+    function updateLivePanel(data) {
+      const matches = [];
+      // Coletar todos os jogos de todas as rodadas
+      if (data.rounds) {
+        for (const round of data.rounds) {
+          for (const m of round.matches) {
+            matches.push(m);
+          }
+        }
+      }
+
+      // Encontrar jogo ao vivo ou mais próximo
+      const now = new Date();
+      let liveMatch = null;
+      let nextMatch = null;
+      let earliestFuture = null;
+
+      for (const m of matches) {
+        const matchDate = new Date(m.date);
+        const status = m.status || 'SCHEDULED';
+        
+        if (status === 'IN_PLAY' || status === 'LIVE' || status === 'PAUSED') {
+          if (!liveMatch) liveMatch = m;
+        } else if (status === 'FINISHED') {
+          continue;
+        } else {
+          if (matchDate > now) {
+            if (!earliestFuture || matchDate < earliestFuture.date) {
+              earliestFuture = { match: m, date: matchDate };
+            }
+          }
+        }
+      }
+
+      // Se não tiver ao vivo, usar o próximo
+      if (!liveMatch && earliestFuture) {
+        nextMatch = earliestFuture.match;
+      } else if (liveMatch) {
+        // Verificar se tem próximo depois do ao vivo
+        for (const m of matches) {
+          const matchDate = new Date(m.date);
+          if (matchDate > new Date(liveMatch.date)) {
+            if (!nextMatch || matchDate < new Date(nextMatch.date)) {
+              nextMatch = m;
+            }
+          }
+        }
+      }
+
+      // Atualizar painel AO VIVO
+      if (liveMatch) {
+        const home = liveMatch.home;
+        const away = liveMatch.away;
+        const score = liveMatch.score;
+        const homeScore = score?.home ?? '—';
+        const awayScore = score?.away ?? '—';
+        const status = liveMatch.status || 'SCHEDULED';
+        
+        document.getElementById('liveHome').textContent = home.name || '—';
+        document.getElementById('liveAway').textContent = away.name || '—';
+        document.getElementById('liveScore').textContent = `${homeScore} × ${awayScore}`;
+        document.getElementById('liveTime').textContent = `• ${new Date(liveMatch.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`;
+        document.getElementById('liveStatus').textContent = STATUS_LABELS[status] || status;
+        document.getElementById('liveStatus').className = `status-badge status-${status === 'FINISHED' ? 'finished' : (status === 'IN_PLAY' || status === 'LIVE' ? 'live' : 'upcoming')}`;
+        
+        const homeImg = document.querySelector('#liveTeams img:first-child');
+        const awayImg = document.querySelector('#liveTeams img:last-child');
+        if (homeImg) homeImg.src = home.logo || '';
+        if (awayImg) awayImg.src = away.logo || '';
+        document.querySelector('.live-badge').textContent = status === 'FINISHED' ? '✓ ENCERRADO' : '● AO VIVO';
+      } else {
+        document.querySelector('.live-match').style.opacity = '0.5';
+        document.getElementById('liveHome').textContent = '—';
+        document.getElementById('liveAway').textContent = '—';
+        document.getElementById('liveScore').textContent = 'vs';
+        document.getElementById('liveStatus').textContent = 'AGUARDANDO';
+        document.getElementById('liveStatus').className = 'status-badge status-upcoming';
+      }
+
+      // Atualizar PRÓXIMO JOGO
+      if (nextMatch) {
+        const home = nextMatch.home;
+        const away = nextMatch.away;
+        const date = new Date(nextMatch.date);
+        document.getElementById('nextHome').textContent = home.name || '—';
+        document.getElementById('nextAway').textContent = away.name || '—';
+        document.getElementById('nextDateTime').textContent = 
+          `📅 ${date.toLocaleDateString('pt-BR')} • 🕘 ${date.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`;
+        const homeImg = document.querySelector('#nextTeams img:first-child');
+        const awayImg = document.querySelector('#nextTeams img:last-child');
+        if (homeImg) homeImg.src = home.logo || '';
+        if (awayImg) awayImg.src = away.logo || '';
+      } else {
+        document.querySelector('.next-match').style.opacity = '0.5';
+        document.getElementById('nextHome').textContent = '—';
+        document.getElementById('nextAway').textContent = '—';
+        document.getElementById('nextDateTime').textContent = '📅 --/-- • 🕘 --:--';
+      }
     }
 
     function render(data) {
@@ -286,26 +729,24 @@
       const N = leaves.length;
       if (N === 0) {
         statusEl.innerHTML =
-          `Ainda sem confrontos de mata-mata publicados pela API para esta temporada. ` +
+          `Ainda sem confrontos de mata-mata publicados pela API. ` +
           `(Confira <code>/api/rounds</code> pra ver os nomes de fase disponíveis.)`;
         return;
       }
 
       const step = 360 / N;
-      // 8 "ramos" de 4 folhas cada, na ordem ao redor do círculo. branchIdx é
-      // herdado pelo vencedor em cada rodada — assim a linha colorida sempre
-      // representa "de qual oitavo do chaveamento esse time saiu", mesmo
-      // depois que ramos diferentes se cruzam nas rodadas mais internas.
       const branchSize = N / 8;
       let nodes = leaves.map((team, i) => ({
         team,
         angle: i * step,
-        decided: true, // folhas sempre "existem"
+        decided: true,
         branchIdx: Math.floor(i / branchSize) % 8,
       }));
 
-      // desenha folhas
-      nodes.forEach((n) => teamNode(n.team, LEVEL_R[0], n.angle, BRANCH_COLORS[n.branchIdx], false));
+      // Desenha folhas
+      nodes.forEach((n) => {
+        teamNode(n.team, LEVEL_R[0], n.angle, BRANCH_COLORS[n.branchIdx], false, NODE_SIZE[0], 0);
+      });
 
       const rounds = data.rounds || [];
       let level = 0;
@@ -315,6 +756,7 @@
         const r1 = LEVEL_R[level];
         const r2 = LEVEL_R[level + 1];
         const rMid = (r1 + r2) / 2;
+        const isFinal = ri === rounds.length - 1;
 
         const newNodes = [];
         for (let i = 0; i < round.matches.length; i++) {
@@ -324,19 +766,40 @@
           if (!a || !b) continue;
 
           const childAngle = (a.angle + b.angle) / 2;
-          const winnerTeam =
-            m.winnerId != null
-              ? m.home.id === m.winnerId ? m.home : m.away
-              : null;
+          const winnerTeam = m.winnerId != null
+            ? m.home.id === m.winnerId ? m.home : m.away
+            : null;
           const decided = !!winnerTeam;
           const winnerIsHome = decided && m.home.id === m.winnerId;
           const branchIdx = decided ? (winnerIsHome ? a.branchIdx : b.branchIdx) : a.branchIdx;
           const color = decided ? BRANCH_COLORS[branchIdx] : GREY;
+          
+          // Guardar dados do jogo para tooltip
+          const matchData = {
+            opponent: decided ? (winnerIsHome ? m.away : m.home) : null,
+            score: decided ? `${m.score?.home ?? '?'} × ${m.score?.away ?? '?'}` : '—',
+            stage: round.label || `Fase ${ri + 1}`,
+            date: new Date(m.date).toLocaleDateString('pt-BR'),
+            time: new Date(m.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}),
+            status: m.status || 'SCHEDULED',
+            statusClass: m.status === 'FINISHED' ? 'finished' : (m.status === 'IN_PLAY' || m.status === 'LIVE' ? 'live' : 'upcoming'),
+            statusLabel: STATUS_LABELS[m.status] || m.status || 'EM BREVE'
+          };
 
-          connector(r1, a.angle, b.angle, rMid, childAngle, r2, color, decided);
+          const glowLevel = Math.min(ri + 1, GLOW_AMOUNT.length);
+          const lineWidth = Math.min(ri + 1, LINE_WIDTH.length);
+
+          connector(r1, a.angle, b.angle, rMid, childAngle, r2, color, glowLevel, lineWidth);
+
+          const teamObj = winnerTeam || { 
+            name: `${a.team?.name ?? '?'} / ${b.team?.name ?? '?'} — a definir`, 
+            logo: null,
+            _matchData: matchData
+          };
+          teamObj._matchData = matchData;
 
           newNodes.push({
-            team: winnerTeam || { name: `${a.team?.name ?? "?"} / ${b.team?.name ?? "?"} — a definir`, logo: null },
+            team: teamObj,
             angle: childAngle,
             decided,
             branchIdx,
@@ -346,17 +809,32 @@
         nodes = newNodes;
         level += 1;
 
-        // desenha os nós resultantes desta rodada
-        nodes.forEach((n) => {
-          teamNode(n.team, LEVEL_R[level], n.angle, n.decided ? BRANCH_COLORS[n.branchIdx] : GREY, !n.decided);
+        // Desenha os nós
+        const isChampion = level === LEVEL_R.length - 1;
+        const sizeIdx = Math.min(level, NODE_SIZE.length - 1);
+        const glowIdx = Math.min(level, GLOW_AMOUNT.length - 1);
+
+        nodes.forEach((n, idx) => {
+          const isChampionNode = isChampion && n.decided && idx === 0;
+          teamNode(
+            n.team, 
+            LEVEL_R[level], 
+            n.angle, 
+            n.decided ? BRANCH_COLORS[n.branchIdx] : GREY, 
+            !n.decided, 
+            NODE_SIZE[sizeIdx], 
+            n.decided ? glowIdx : 0,
+            isChampionNode
+          );
         });
       }
 
       drawTrophy();
+      updateLivePanel(data);
 
       const ts = new Date(data.updatedAt).toLocaleString("pt-BR");
       statusEl.innerHTML = `Atualizado em ${ts} <button id="refreshBtn">Atualizar agora</button>`;
-      document.getElementById("refreshBtn").addEventListener("click", load);
+      document.getElementById("refreshBtn")?.addEventListener("click", load);
     }
 
     async function load() {
