@@ -23,392 +23,248 @@
   </div>
 
   <script type="module">
-    // ============================================================
-    //  ARQUITETURA 2-LAYER – BRACKET CIRCULAR PROFISSIONAL
-    //  ✅ UI isolada do SVG
-    //  ✅ state central (sem DOM lookup em eventos)
-    //  ✅ tooltip GPU-friendly
-    //  ✅ propagação via nextMatchId + nextSlot (backend)
-    // ============================================================
+const NS = 'http://www.w3.org/2000/svg';
 
-    const NS = 'http://www.w3.org/2000/svg';
+const svgLayer = document.getElementById('bracket-layer');
+const tooltipEl = document.getElementById('tooltip');
+const statusText = document.getElementById('statusText');
+const refreshBtn = document.getElementById('refreshBtn');
 
-    // ---------- DOM REFS (uma vez, no início) ----------
-    const svgLayer = document.getElementById('bracket-layer');
-    const tooltipEl = document.getElementById('tooltip');
-    const statusText = document.getElementById('statusText');
-    const refreshBtn = document.getElementById('refreshBtn');
+const state = {
+  rounds: [],
+  leaves: [],
+  hover: null,
+  updatedAt: null,
+};
 
-    // ---------- STATE CENTRAL ----------
-    const state = {
-      rounds: [],          // dados do backend
-      leaves: [],          // times da primeira fase
-      hover: null,         // { matchId, x, y } ou null
-      updatedAt: null,
-    };
+// ======================
+// CONFIG
+// ======================
+const CX = 600;
+const CY = 500;
+const LEVEL_R = [420, 360, 300, 240, 180, 120];
 
-    // ---------- CONSTANTES DE LAYOUT ----------
-    const CX = 600, CY = 500;          // centro do SVG
-    const LEVEL_R = [420, 360, 300, 240, 180, 120];
-    const BRANCH_COLORS = [
-      '#e6484f', '#3ddc84', '#f0c23d', '#4ea1f7',
-      '#b768e0', '#ff9f53', '#2ec4b6', '#ff6f91',
-    ];
-    const GREY = '#3c3c40';
-    const NODE_SIZE = 30;
+// ======================
+// SAFE HELPERS
+// ======================
+const safeArr = v => Array.isArray(v) ? v : [];
+const safeNum = v => isFinite(v) ? v : 0;
 
-    // ---------- FUNÇÕES AUXILIARES ----------
-    function el(tag, attrs = {}) {
-      const n = document.createElementNS(NS, tag);
-      for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
-      return n;
+function el(tag, attrs = {}) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  return n;
+}
+
+// ======================
+// POSITION
+// ======================
+function polar(r, a) {
+  const x = CX + r * Math.sin(a);
+  const y = CY - r * Math.cos(a);
+  return [x, y];
+}
+
+// ======================
+// MATCH INDEX (ÚNICO CORRETO)
+// ======================
+const matchMap = new Map();
+
+function indexMatches(rounds) {
+  matchMap.clear();
+  rounds.forEach(r => {
+    r.matches.forEach(m => {
+      matchMap.set(m.fixtureId, m);
+    });
+  });
+}
+
+// pega pais via reverse lookup do nextMatchId
+function getParents(matchId) {
+  const parents = [];
+
+  for (const m of matchMap.values()) {
+    if (m.nextMatchId === matchId) {
+      parents.push(m);
+    }
+  }
+
+  return parents;
+}
+
+// ======================
+// SVG CLEAN
+// ======================
+function clear() {
+  while (svgLayer.firstChild) svgLayer.removeChild(svgLayer.firstChild);
+}
+
+// ======================
+// NODE
+// ======================
+function drawNode(team, r, a, color, pending, matchId) {
+  if (!isFinite(a)) return;
+
+  const [x, y] = polar(r, a);
+  if (!isFinite(x) || !isFinite(y)) return;
+
+  const g = el('g');
+  g.dataset.id = matchId || '';
+
+  g.appendChild(el('circle', {
+    cx: x,
+    cy: y,
+    r: 16,
+    fill: pending ? '#222' : color,
+    stroke: '#000',
+    'stroke-width': 2
+  }));
+
+  const text = el('text', {
+    x,
+    y: y + 4,
+    'text-anchor': 'middle',
+    'font-size': 10,
+    fill: '#fff'
+  });
+
+  text.textContent = team?.code || 'TBD';
+  g.appendChild(text);
+
+  g.addEventListener('mouseenter', () => {
+    state.hover = { matchId, x, y };
+    renderUI();
+  });
+
+  g.addEventListener('mouseleave', () => {
+    state.hover = null;
+    renderUI();
+  });
+
+  svgLayer.appendChild(g);
+}
+
+// ======================
+// CONNECTION
+// ======================
+function connect(a, b, color) {
+  if (!isFinite(a.x) || !isFinite(b.x)) return;
+
+  const path = el('path', {
+    d: `M${a.x},${a.y} Q${(a.x+b.x)/2},${(a.y+b.y)/2} ${b.x},${b.y}`,
+    stroke: color,
+    fill: 'none'
+  });
+
+  svgLayer.appendChild(path);
+}
+
+// ======================
+// RENDER
+// ======================
+function render() {
+  clear();
+
+  const rounds = safeArr(state.rounds);
+  if (!rounds.length) return;
+
+  indexMatches(rounds);
+
+  const leaves = safeArr(state.leaves);
+  const baseN = leaves.length || 1;
+
+  // ROUND 0
+  const nodes = leaves.map((t, i) => {
+    const a = (i / baseN) * Math.PI * 2 - Math.PI/2;
+    drawNode(t, LEVEL_R[0], a, '#555', false, null);
+    return { team: t, angle: a };
+  });
+
+  let prev = nodes;
+
+  for (let r = 0; r < rounds.length; r++) {
+    const matches = safeArr(rounds[r].matches);
+
+    const next = [];
+
+    for (let i = 0; i < matches.length; i++) {
+      const m = matches[i];
+
+      const parents = getParents(m.fixtureId);
+
+      const home = parents[0];
+      const away = parents[1];
+
+      if (!home || !away) continue;
+
+      const a = (home.angle + away.angle) / 2;
+
+      const winner =
+        m.winnerId === m.home?.id ? m.home :
+        m.winnerId === m.away?.id ? m.away :
+        null;
+
+      const color = winner ? '#4ade80' : '#555';
+
+      connect(
+        { x: CX + Math.cos(home.angle)*LEVEL_R[r], y: CY - Math.sin(home.angle)*LEVEL_R[r] },
+        { x: CX + Math.cos(away.angle)*LEVEL_R[r], y: CY - Math.sin(away.angle)*LEVEL_R[r] },
+        color
+      );
+
+      drawNode(
+        winner || { code: 'TBD' },
+        LEVEL_R[r+1],
+        a,
+        color,
+        !winner,
+        m.fixtureId
+      );
+
+      next.push({ angle: a, team: winner || null });
     }
 
-    function polar(r, angleRad) {
-      // angleRad: 0 = topo (12h)
-      const x = CX + r * Math.sin(angleRad);
-      const y = CY - r * Math.cos(angleRad);
-      return [x, y];
-    }
+    prev = next;
+  }
+}
 
-    function midAngle(a, b) {
-      let diff = b - a;
-      if (diff > Math.PI) diff -= 2 * Math.PI;
-      if (diff < -Math.PI) diff += 2 * Math.PI;
-      return a + diff / 2;
-    }
+// ======================
+// UI SAFE
+// ======================
+function renderUI() {
+  if (!tooltipEl) return;
 
-    // ---------- LIMPAR SVG (mantendo fundo) ----------
-    function clearSVG() {
-      while (svgLayer.lastChild) svgLayer.removeChild(svgLayer.lastChild);
-    }
+  if (!state.hover) {
+    tooltipEl.style.opacity = 0;
+    return;
+  }
 
-    // ---------- DESENHO DE FUNDO ----------
-    function drawBackground() {
-      const defs = el('defs', { id: 'defs' });
-      const grad = el('radialGradient', { id: 'bgGlow', cx: '50%', cy: '50%', r: '55%' });
-      grad.appendChild(el('stop', { offset: '0%', 'stop-color': '#3a2c0c' }));
-      grad.appendChild(el('stop', { offset: '55%', 'stop-color': '#15120a' }));
-      grad.appendChild(el('stop', { offset: '100%', 'stop-color': '#0b0b0c' }));
-      defs.appendChild(grad);
-      svgLayer.appendChild(defs);
-      svgLayer.appendChild(el('rect', { x: 0, y: 0, width: 1200, height: 1000, fill: 'url(#bgGlow)' }));
-      LEVEL_R.forEach(r => {
-        svgLayer.appendChild(el('circle', { cx: CX, cy: CY, r, fill: 'none', stroke: '#222226', 'stroke-width': 1 }));
-      });
-    }
+  tooltipEl.style.opacity = 1;
+  tooltipEl.style.transform =
+    `translate3d(${state.hover.x+10}px,${state.hover.y+10}px,0)`;
+}
 
-    // ---------- TAÇA ----------
-    function drawTrophy() {
-      const g = el('g');
-      g.appendChild(el('circle', { cx: CX, cy: CY, r: 56, fill: '#0b0b0c', stroke: '#3a2c0c', 'stroke-width': 2 }));
-      const t = el('text', { x: CX, y: CY + 8, 'text-anchor': 'middle', 'font-size': 40, fill: '#d9a531' });
-      t.textContent = '🏆';
-      g.appendChild(t);
-      svgLayer.appendChild(g);
-    }
+// ======================
+// LOAD
+// ======================
+async function load() {
+  const res = await fetch('/api/bracket');
+  const data = await res.json();
 
-    // ---------- CONECTOR (CURVA) ----------
-    function drawConnector(r1, angleA, r2, angleB, rMid, childAngle, rChild, color) {
-      if (isNaN(angleA) || isNaN(angleB) || isNaN(childAngle)) return;
+  state.rounds = data.rounds || [];
+  state.leaves = data.leaves || [];
+  state.updatedAt = data.updatedAt;
 
-      const [x1, y1] = polar(r1, angleA);
-      const [mx1, my1] = polar(rMid, angleA);
-      const [x2, y2] = polar(r2, angleB);
-      const [mx2, my2] = polar(rMid, angleB);
-      const [cmx, cmy] = polar(rMid, childAngle);
-      const [cx2, cy2] = polar(rChild, childAngle);
+  render();
+  renderUI();
+}
 
-      if ([x1,y1,mx1,my1,x2,y2,mx2,my2,cmx,cmy,cx2,cy2].some(v => isNaN(v))) return;
-
-      const g = el('g', { fill: 'none', stroke: color, 'stroke-width': 2, 'stroke-linecap': 'round' });
-      g.appendChild(el('path', { d: `M${x1},${y1} L${mx1},${my1}` }));
-      g.appendChild(el('path', { d: `M${x2},${y2} L${mx2},${my2}` }));
-      const diff = angleB - angleA;
-      const large = Math.abs(diff) > Math.PI ? 1 : 0;
-      g.appendChild(el('path', { d: `M${mx1},${my1} A${rMid},${rMid} 0 ${large} 1 ${mx2},${my2}` }));
-      g.appendChild(el('path', { d: `M${cmx},${cmy} L${cx2},${cy2}` }));
-      svgLayer.appendChild(g);
-    }
-
-    // ---------- NÓ (TIME) ----------
-    function drawTeamNode(team, r, angleRad, branchColor, pending) {
-      if (isNaN(angleRad) || !isFinite(angleRad)) return;
-
-      const [x, y] = polar(r, angleRad);
-      if (isNaN(x) || isNaN(y)) return;
-
-      const size = NODE_SIZE;
-      const g = el('g', { class: 'match-card', 'data-team-id': team?.id || '' });
-
-      // clipPath
-      const defs = svgLayer.querySelector('#defs') || el('defs', { id: 'defs' });
-      if (!svgLayer.querySelector('#defs')) svgLayer.prepend(defs);
-      const clipId = `clip-${team?.id || Math.random().toString(36).slice(2)}`;
-      let clip = document.getElementById(clipId);
-      if (!clip) {
-        clip = el('clipPath', { id: clipId });
-        clip.appendChild(el('circle', { cx: x, cy: y, r: size / 2 }));
-        defs.appendChild(clip);
-      }
-
-      g.appendChild(el('circle', { cx: x, cy: y, r: size / 2 + 2, fill: '#101012', stroke: pending ? GREY : branchColor, 'stroke-width': 2 }));
-
-      if (team && team.logo) {
-        const img = el('image', {
-          x: x - size/2, y: y - size/2, width: size, height: size,
-          href: team.logo,
-          'clip-path': `url(#${clipId})`,
-          class: `node-img${pending ? ' pending' : ''}`,
-          preserveAspectRatio: 'xMidYMid slice',
-        });
-        g.appendChild(img);
-      } else {
-        g.appendChild(el('circle', { cx: x, cy: y, r: size/2 - 4, fill: '#222226' }));
-      }
-
-      // Evento: apenas atualiza o state (não mexe no DOM diretamente)
-      const matchId = team?._matchId || null;
-      g.addEventListener('mouseenter', (ev) => {
-        if (!matchId) return;
-        const rect = svgLayer.getBoundingClientRect();
-        state.hover = {
-          matchId,
-          x: ev.clientX - rect.left,
-          y: ev.clientY - rect.top,
-        };
-        renderUI();
-      });
-      g.addEventListener('mousemove', (ev) => {
-        if (!state.hover) return;
-        const rect = svgLayer.getBoundingClientRect();
-        state.hover.x = ev.clientX - rect.left;
-        state.hover.y = ev.clientY - rect.top;
-        renderUI();
-      });
-      g.addEventListener('mouseleave', () => {
-        state.hover = null;
-        renderUI();
-      });
-
-      svgLayer.appendChild(g);
-    }
-
-    // ---------- PROPAGAÇÃO DE VENCEDORES (usando nextMatchId + nextSlot) ----------
-    function propagateWinners(rounds) {
-      const matchMap = new Map();
-      rounds.forEach(round => {
-        round.matches.forEach(m => matchMap.set(m.fixtureId, m));
-      });
-
-      rounds.forEach(round => {
-        round.matches.forEach(match => {
-          if (!match.nextMatchId) return;
-          const next = matchMap.get(match.nextMatchId);
-          if (!next) return;
-
-          // Determinar vencedor
-          let winner = null;
-          if (match.winnerId != null) {
-            winner = (match.home?.id === match.winnerId) ? match.home : match.away;
-          } else if (match.status === 'FINISHED' && match.score) {
-            const h = match.score?.home ?? 0;
-            const a = match.score?.away ?? 0;
-            if (h > a) winner = match.home;
-            else if (a > h) winner = match.away;
-            else if (match.score?.penalties) {
-              const ph = match.score.penalties?.home ?? 0;
-              const pa = match.score.penalties?.away ?? 0;
-              if (ph > pa) winner = match.home;
-              else if (pa > ph) winner = match.away;
-            }
-          }
-          if (!winner) return;
-
-          if (match.nextSlot === 'home') next.home = winner;
-          else if (match.nextSlot === 'away') next.away = winner;
-        });
-      });
-    }
-
-    // ---------- RENDER SVG ----------
-    function renderSVG() {
-      clearSVG();
-      drawBackground();
-
-      const rounds = state.rounds;
-      if (!rounds || rounds.length === 0) {
-        statusText.textContent = 'Nenhuma fase encontrada.';
-        return;
-      }
-
-      // Propagar vencedores (usa nextMatchId + nextSlot)
-      propagateWinners(rounds);
-
-      // 1. Folhas (primeira fase)
-      const leaves = state.leaves || [];
-      const N = leaves.length;
-      if (N === 0) {
-        statusText.textContent = 'Nenhum time na primeira fase.';
-        return;
-      }
-
-      // Renderizar folhas
-      const firstNodes = leaves.map((team, i) => {
-        const angleRad = (i / N) * 2 * Math.PI - Math.PI / 2;
-        const branchSize = N / 8;
-        const branchIdx = Math.floor(i / branchSize) % 8;
-        // Guardar matchId para hover
-        team._matchId = null; // folhas não têm matchId direto
-        drawTeamNode(team, LEVEL_R[0], angleRad, BRANCH_COLORS[branchIdx], false);
-        return { team, angle: angleRad, branchIdx };
-      });
-
-      // 2. Fases seguintes
-      let previousNodes = firstNodes;
-      let level = 0;
-
-      for (let ri = 0; ri < rounds.length; ri++) {
-        const round = rounds[ri];
-        const matches = round.matches || [];
-        const r1 = LEVEL_R[level];
-        const r2 = LEVEL_R[level + 1];
-        const rMid = (r1 + r2) / 2;
-
-        const currentNodes = [];
-
-        for (let i = 0; i < matches.length; i++) {
-          const match = matches[i];
-          // Encontrar pais por ID (já propagados)
-          const homeParent = previousNodes.find(n => n.team?.id === match.home?.id);
-          const awayParent = previousNodes.find(n => n.team?.id === match.away?.id);
-
-          if (!homeParent || !awayParent) continue;
-
-          const childAngle = midAngle(homeParent.angle, awayParent.angle);
-
-          // Determinar vencedor
-          let winnerTeam = null;
-          let decided = false;
-          if (match.winnerId != null) {
-            decided = true;
-            winnerTeam = (match.home?.id === match.winnerId) ? match.home : match.away;
-          } else if (match.status === 'FINISHED' && match.score) {
-            const h = match.score?.home ?? 0;
-            const a = match.score?.away ?? 0;
-            if (h > a) { decided = true; winnerTeam = match.home; }
-            else if (a > h) { decided = true; winnerTeam = match.away; }
-            else if (match.score?.penalties) {
-              const ph = match.score.penalties?.home ?? 0;
-              const pa = match.score.penalties?.away ?? 0;
-              if (ph > pa) { decided = true; winnerTeam = match.home; }
-              else if (pa > ph) { decided = true; winnerTeam = match.away; }
-            }
-          }
-
-          const winnerIsHome = decided && winnerTeam && winnerTeam.id === match.home?.id;
-          const branchIdx = decided
-            ? (winnerIsHome ? homeParent.branchIdx : awayParent.branchIdx)
-            : homeParent.branchIdx;
-          const color = decided ? BRANCH_COLORS[branchIdx] : GREY;
-
-          // Conector
-          drawConnector(r1, homeParent.angle, r1, awayParent.angle, rMid, childAngle, r2, color);
-
-          // Nó filho
-          const teamObj = winnerTeam || { name: 'TBD', logo: null, id: null, code: null };
-          teamObj._matchId = match.fixtureId; // para hover
-          drawTeamNode(teamObj, r2, childAngle, decided ? BRANCH_COLORS[branchIdx] : GREY, !decided);
-
-          currentNodes.push({
-            team: teamObj,
-            angle: childAngle,
-            branchIdx,
-          });
-        }
-
-        previousNodes = currentNodes;
-        level += 1;
-        if (currentNodes.length === 0) break;
-      }
-
-      drawTrophy();
-
-      // Atualizar status
-      const ts = state.updatedAt ? new Date(state.updatedAt).toLocaleString('pt-BR') : '--';
-      statusText.textContent = `Atualizado em ${ts}`;
-    }
-
-    // ---------- RENDER UI (tooltip) ----------
-    function renderUI() {
-      const hover = state.hover;
-      if (!hover || !tooltipEl) {
-        tooltipEl.classList.remove('visible');
-        return;
-      }
-
-      // Encontrar o match pelo ID
-      let match = null;
-      for (const round of state.rounds) {
-        const found = round.matches.find(m => m.fixtureId === hover.matchId);
-        if (found) { match = found; break; }
-      }
-      if (!match) {
-        tooltipEl.classList.remove('visible');
-        return;
-      }
-
-      const home = match.home?.name || 'TBD';
-      const away = match.away?.name || 'TBD';
-      const score = match.status === 'FINISHED'
-        ? `${match.score?.home ?? 0} – ${match.score?.away ?? 0}`
-        : (match.isLive ? 'AO VIVO' : 'vs');
-      const stage = match.stage || 'Fase eliminatória';
-      const date = match.date ? new Date(match.date).toLocaleDateString('pt-BR') : '--/--';
-      const time = match.date ? new Date(match.date).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }) : '--:--';
-
-      tooltipEl.innerHTML = `
-        <div><strong>${home}</strong> vs <strong>${away}</strong></div>
-        <div class="score">${score}</div>
-        <div class="detail">🏆 ${stage}</div>
-        <div class="detail">📅 ${date} • 🕘 ${time}</div>
-        ${match.isLive ? '<div class="detail live">🔴 AO VIVO</div>' : ''}
-      `;
-
-      // Posicionar com transform (GPU)
-      const x = hover.x + 16;
-      const y = hover.y + 16;
-      tooltipEl.style.transform = `translate3d(${x}px, ${y}px, 0)`;
-      tooltipEl.classList.add('visible');
-    }
-
-    // ---------- LOAD (buscar dados) ----------
-    async function load() {
-      statusText.textContent = 'Atualizando…';
-      try {
-        const res = await fetch('/api/bracket', { cache: 'no-store' });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Erro na API');
-
-        state.rounds = data.rounds || [];
-        state.leaves = data.leaves || [];
-        state.updatedAt = data.updatedAt;
-
-        renderSVG();
-        renderUI(); // limpa tooltip
-      } catch (err) {
-        statusText.textContent = `❌ ${err.message}`;
-      }
-    }
-
-    // ---------- INICIALIZAÇÃO ----------
-    refreshBtn.addEventListener('click', load);
-    load();
-
-    // Atualização automática a cada 90s
-    setInterval(load, 90000);
-
-    console.log('🏆 Arquitetura 2-layer iniciada com sucesso.');
-  </script>
+// ======================
+// START
+// ======================
+refreshBtn.onclick = load;
+load();
+setInterval(load, 90000);
+</script>
 </body>
 </html>
