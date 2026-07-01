@@ -2,288 +2,369 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Copa 2026 – Bracket Circular</title>
-   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
+  <div id="app">
+    <svg id="bracket-layer" viewBox="0 0 1200 1000"></svg>
 
-<div id="app">
-  <svg id="bracket-layer" viewBox="0 0 1200 1000"></svg>
+    <div id="tooltip"></div>
+    <div id="panel"></div>
 
-  <div id="tooltip"></div>
-  <div id="panel"></div>
-
-  <div id="status">
-    <span id="statusText">Carregando…</span>
-    <button id="refreshBtn">↻ Atualizar</button>
+    <div id="status">
+      <span id="statusText">Carregando…</span>
+      <button id="refreshBtn">↻ Atualizar</button>
+    </div>
   </div>
-</div>
-
-<script type="module">
-(() => {
-
-/* =========================
-   DOM BLINDADO (SAFE INIT)
-========================= */
-
-function $(id, warn = true) {
-  const el = document.getElementById(id);
-  if (!el && warn) console.warn(`[DOM] elemento não encontrado: #${id}`);
-  return el;
-}
-
-const svgLayer   = $('bracket-layer');
-const tooltipEl  = $('tooltip');
-const panelEl    = $('panel');
-const statusText = $('statusText');
-const refreshBtn = $('refreshBtn');
-
-/* =========================
-   STATE
-========================= */
-
-const state = {
-  rounds: [],
-  leaves: [],
-  hover: null,
-  updatedAt: null
-};
-
-/* =========================
-   SAFE BIND EVENTS
-========================= */
-
-function safeBind() {
-  if (refreshBtn) {
-    refreshBtn.onclick = load;
-  }
-}
-
-/* =========================
-   CONSTANTS
-========================= */
-
-const NS = 'http://www.w3.org/2000/svg';
-const CX = 600, CY = 500;
-const LEVEL_R = [420, 360, 300, 240, 180, 120];
-
-const COLORS = [
-  '#e6484f','#3ddc84','#f0c23d','#4ea1f7',
-  '#b768e0','#ff9f53','#2ec4b6','#ff6f91'
-];
-
-const GREY = '#3c3c40';
-
-/* =========================
-   SVG HELPERS
-========================= */
-
-function elNS(tag, attrs={}) {
-  const n = document.createElementNS(NS, tag);
-  for (const k in attrs) n.setAttribute(k, attrs[k]);
-  return n;
-}
-
-function polar(r,a){
-  return [CX + r*Math.sin(a), CY - r*Math.cos(a)];
-}
-
-function clear(){
-  if (!svgLayer) return;
-  while(svgLayer.firstChild) svgLayer.removeChild(svgLayer.firstChild);
-}
-
-/* =========================
-   NODE SAFE
-========================= */
-
-function drawNode(team, r, a, color, pending, matchId) {
-  if (!svgLayer) return;
-  if (!isFinite(a)) return;
-
-  const [x,y] = polar(r,a);
-  if (!isFinite(x)||!isFinite(y)) return;
-
-  const g = elNS('g');
-
-  g.appendChild(elNS('circle',{
-    cx:x, cy:y, r:14,
-    fill: pending ? '#222' : color,
-    stroke:'#000'
-  }));
-
-  const t = elNS('text',{
-    x, y:y+4,
-    'text-anchor':'middle',
-    'font-size':10,
-    fill:'#fff'
-  });
 
-  t.textContent = team?.code || 'TBD';
-  g.appendChild(t);
-
-  g.onmouseenter = (e)=>{
-    const rect = svgLayer.getBoundingClientRect();
-    state.hover = {
-      x:e.clientX-rect.left,
-      y:e.clientY-rect.top,
-      matchId
-    };
-    renderUI();
-  };
-
-  g.onmouseleave = ()=>{
-    state.hover=null;
-    renderUI();
-  };
-
-  svgLayer.appendChild(g);
-}
-
-/* =========================
-   CONNECTION SAFE
-========================= */
-
-function connect(r,a,b,color){
-  if(!svgLayer) return;
-  if(!isFinite(a)||!isFinite(b)) return;
-
-  const [x1,y1]=polar(r,a);
-  const [x2,y2]=polar(r,b);
-
-  const p=elNS('path',{
-    d:`M${x1},${y1} A${r},${r} 0 0 1 ${x2},${y2}`,
-    stroke:color,
-    fill:'none'
-  });
-
-  svgLayer.appendChild(p);
-}
-
-/* =========================
-   LOAD SAFE
-========================= */
-
-async function load(){
-  if(statusText) statusText.textContent='Atualizando...';
-
-  try{
-    const r=await fetch('/api/bracket');
-    const d=await r.json();
-
-    state.rounds=d.rounds||[];
-    state.leaves=d.leaves||[];
-
-    render();
-
-    if(statusText){
-      statusText.textContent='OK';
-    }
-
-  }catch(e){
-    console.error(e);
-    if(statusText){
-      statusText.textContent='Erro API';
-    }
-  }
-}
-
-/* =========================
-   RENDER SAFE
-========================= */
-
-function render(){
-  if(!svgLayer) return;
-
-  clear();
-
-  const leaves=state.leaves||[];
-  const rounds=state.rounds||[];
-
-  if(!leaves.length||!rounds.length) return;
-
-  let prev=leaves.map((t,i)=>{
-    const a=(i/leaves.length)*Math.PI*2;
-    const c=COLORS[i%8];
-    drawNode(t,LEVEL_R[0],a,c,false,null);
-    return {team:t,angle:a,colorIndex:i%8};
-  });
-
-  for(const [ri,round] of rounds.entries()){
-    const r1=LEVEL_R[ri];
-    const r2=LEVEL_R[ri+1]||LEVEL_R[ri];
-
-    const current=[];
-
-    for(const m of round.matches||[]){
-
-      const h=prev.find(n=>n.team?.id===m.home?.id);
-      const a=prev.find(n=>n.team?.id===m.away?.id);
-
-      if(!h||!a) continue;
-
-      const angle=(h.angle+a.angle)/2;
-
-      const color=COLORS[h.colorIndex??0];
-
-      connect(r1,h.angle,a.angle,color);
-
-      drawNode(
-        m.winnerId
-          ? (m.home?.id===m.winnerId?m.home:m.away)
-          : {code:'TBD'},
-        r2,
-        angle,
-        m.winnerId?color:GREY,
-        !m.winnerId,
-        m.fixtureId
-      );
-
-      current.push({team:m.winner||{},angle,colorIndex:h.colorIndex});
-    }
-
-    prev=current;
-  }
-}
-
-/* =========================
-   UI SAFE
-========================= */
-
-function renderUI(){
-  if(!tooltipEl||!panelEl) return;
-
-  if(!state.hover){
-    tooltipEl.style.opacity=0;
-    panelEl.style.opacity=1;
-    return;
-  }
-
-  tooltipEl.style.opacity=1;
-  tooltipEl.style.transform=
-    `translate3d(${state.hover.x+10}px,${state.hover.y+10}px,0)`;
-}
-
-/* =========================
-   START SAFE
-========================= */
-
-function init(){
-  safeBind();
-  load();
-  setInterval(load,90000);
-}
-
-if(document.readyState==='loading'){
-  document.addEventListener('DOMContentLoaded',init);
-}else{
-  init();
-}
-
-})();
-</script>
-
+  <script type="module">
+    (() => {
+      /* =========================
+         DOM BLINDADO (SAFE INIT)
+      ========================= */
+
+      function $(id, warn = true) {
+        const el = document.getElementById(id);
+        if (!el && warn) console.warn(`[DOM] elemento não encontrado: #${id}`);
+        return el;
+      }
+
+      const svgLayer = $('bracket-layer');
+      const tooltipEl = $('tooltip');
+      const panelEl = $('panel');
+      const statusText = $('statusText');
+      const refreshBtn = $('refreshBtn');
+
+      /* =========================
+         STATE
+      ========================= */
+
+      const state = {
+        rounds: [],
+        leaves: [],
+        hover: null, // { x, y, id: matchId }
+        updatedAt: null,
+      };
+
+      /* =========================
+         SAFE BIND EVENTS
+      ========================= */
+
+      function safeBind() {
+        if (refreshBtn) {
+          refreshBtn.onclick = load;
+        }
+      }
+
+      /* =========================
+         CONSTANTS
+      ========================= */
+
+      const NS = 'http://www.w3.org/2000/svg';
+      const CX = 600,
+        CY = 500;
+      const LEVEL_R = [420, 360, 300, 240, 180, 120];
+
+      const COLORS = [
+        '#e6484f', '#3ddc84', '#f0c23d', '#4ea1f7',
+        '#b768e0', '#ff9f53', '#2ec4b6', '#ff6f91',
+      ];
+
+      const GREY = '#3c3c40';
+
+      /* =========================
+         SVG HELPERS
+      ========================= */
+
+      function elNS(tag, attrs = {}) {
+        const n = document.createElementNS(NS, tag);
+        for (const k in attrs) n.setAttribute(k, attrs[k]);
+        return n;
+      }
+
+      function polar(r, a) {
+        return [CX + r * Math.sin(a), CY - r * Math.cos(a)];
+      }
+
+      function clear() {
+        if (!svgLayer) return;
+        while (svgLayer.firstChild) svgLayer.removeChild(svgLayer.firstChild);
+      }
+
+      /* =========================
+         NODE SAFE
+      ========================= */
+
+      function drawNode(team, r, a, color, pending, matchId) {
+        if (!svgLayer) return;
+        if (!isFinite(a)) return;
+
+        const [x, y] = polar(r, a);
+        if (!isFinite(x) || !isFinite(y)) return;
+
+        const g = elNS('g');
+
+        g.appendChild(elNS('circle', {
+          cx: x,
+          cy: y,
+          r: 14,
+          fill: pending ? '#222' : color,
+          stroke: '#000',
+        }));
+
+        const t = elNS('text', {
+          x,
+          y: y + 4,
+          'text-anchor': 'middle',
+          'font-size': 10,
+          fill: '#fff',
+        });
+
+        t.textContent = team?.code || 'TBD';
+        g.appendChild(t);
+
+        g.onmouseenter = (e) => {
+          const rect = svgLayer.getBoundingClientRect();
+          state.hover = {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top,
+            id: matchId,
+          };
+          renderUI();
+        };
+
+        g.onmouseleave = () => {
+          state.hover = null;
+          renderUI();
+        };
+
+        svgLayer.appendChild(g);
+      }
+
+      /* =========================
+         CONNECTION SAFE
+      ========================= */
+
+      function connect(r, a, b, color) {
+        if (!svgLayer) return;
+        if (!isFinite(a) || !isFinite(b)) return;
+
+        const [x1, y1] = polar(r, a);
+        const [x2, y2] = polar(r, b);
+
+        const p = elNS('path', {
+          d: `M${x1},${y1} A${r},${r} 0 0 1 ${x2},${y2}`,
+          stroke: color,
+          fill: 'none',
+        });
+
+        svgLayer.appendChild(p);
+      }
+
+      /* =========================
+         LOAD SAFE
+      ========================= */
+
+      async function load() {
+        if (statusText) statusText.textContent = 'Atualizando...';
+
+        try {
+          const r = await fetch('/api/bracket');
+          const d = await r.json();
+
+          state.rounds = d.rounds || [];
+          state.leaves = d.leaves || [];
+
+          render();
+
+          if (statusText) {
+            statusText.textContent = `Atualizado em ${new Date().toLocaleString('pt-BR')}`;
+          }
+        } catch (e) {
+          console.error(e);
+          if (statusText) {
+            statusText.textContent = '❌ Erro ao carregar';
+          }
+        }
+      }
+
+      /* =========================
+         RENDER SVG
+      ========================= */
+
+      function render() {
+        if (!svgLayer) return;
+
+        clear();
+
+        const leaves = state.leaves || [];
+        const rounds = state.rounds || [];
+
+        if (!leaves.length || !rounds.length) return;
+
+        // FASE 0 – folhas
+        let prev = leaves.map((t, i) => {
+          const a = (i / leaves.length) * Math.PI * 2 - Math.PI / 2;
+          const c = COLORS[i % 8];
+          drawNode(t, LEVEL_R[0], a, c, false, null);
+          return { team: t, angle: a, colorIndex: i % 8 };
+        });
+
+        // FASES SEGUINTES
+        for (const [ri, round] of rounds.entries()) {
+          const r1 = LEVEL_R[ri];
+          const r2 = LEVEL_R[ri + 1] || LEVEL_R[ri];
+
+          const current = [];
+
+          for (const m of round.matches || []) {
+            const h = prev.find(n => n.team?.id === m.home?.id);
+            const a = prev.find(n => n.team?.id === m.away?.id);
+
+            if (!h || !a) continue;
+
+            const angle = (h.angle + a.angle) / 2;
+            const color = COLORS[h.colorIndex ?? 0];
+
+            // Conectar os dois pais com um arco
+            connect(r1, h.angle, a.angle, color);
+
+            // Determinar vencedor
+            let winnerTeam = null;
+            let decided = false;
+            if (m.winnerId != null) {
+              decided = true;
+              winnerTeam = (m.home?.id === m.winnerId) ? m.home : m.away;
+            } else if (m.status === 'FINISHED' && m.score) {
+              const hScore = m.score?.home ?? 0;
+              const aScore = m.score?.away ?? 0;
+              if (hScore > aScore) { decided = true;
+                winnerTeam = m.home; } else if (aScore > hScore) { decided = true;
+                winnerTeam = m.away; } else if (m.score?.penalties) {
+                const ph = m.score.penalties?.home ?? 0;
+                const pa = m.score.penalties?.away ?? 0;
+                if (ph > pa) { decided = true;
+                  winnerTeam = m.home; } else if (pa > ph) { decided = true;
+                  winnerTeam = m.away; }
+              }
+            }
+
+            const teamObj = winnerTeam || { name: 'TBD', code: 'TBD', id: null };
+            drawNode(
+              teamObj,
+              r2,
+              angle,
+              decided ? color : GREY,
+              !decided,
+              m.fixtureId
+            );
+
+            current.push({
+              team: teamObj,
+              angle: angle,
+              colorIndex: h.colorIndex,
+            });
+          }
+
+          prev = current;
+        }
+
+        // Taça central
+        const trophy = elNS('g');
+        trophy.appendChild(elNS('circle', { cx: CX, cy: CY, r: 56, fill: '#0b0b0c', stroke: '#3a2c0c', 'stroke-width': 2 }));
+        const t = elNS('text', { x: CX, y: CY + 8, 'text-anchor': 'middle', 'font-size': 40, fill: '#d9a531' });
+        t.textContent = '🏆';
+        trophy.appendChild(t);
+        svgLayer.appendChild(trophy);
+      }
+
+      /* =========================
+         RENDER UI (tooltip + panel)
+      ========================= */
+
+      function renderUI() {
+        if (!tooltipEl || !panelEl) return;
+
+        // Se não houver hover, esconde ambos
+        if (!state.hover) {
+          tooltipEl.classList.remove('visible');
+          panelEl.classList.remove('visible');
+          return;
+        }
+
+        // Encontrar o match correspondente ao hover
+        const match = state.rounds
+          .flatMap(r => r.matches || [])
+          .find(m => m.fixtureId === state.hover.id);
+
+        // Atualizar tooltip
+        if (match) {
+          const home = match.home?.name || 'TBD';
+          const away = match.away?.name || 'TBD';
+          const score = match.status === 'FINISHED'
+            ? `${match.score?.home ?? 0} – ${match.score?.away ?? 0}`
+            : (match.isLive ? 'AO VIVO' : 'vs');
+          const stage = match.stage || 'Fase eliminatória';
+          const date = match.date ? new Date(match.date).toLocaleDateString('pt-BR') : '--/--';
+          const time = match.date ? new Date(match.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+
+          tooltipEl.innerHTML = `
+            <div><strong>${home}</strong> vs <strong>${away}</strong></div>
+            <div class="score">${score}</div>
+            <div class="detail">🏆 ${stage}</div>
+            <div class="detail">📅 ${date} • 🕘 ${time}</div>
+            ${match.isLive ? '<div class="detail live">🔴 AO VIVO</div>' : ''}
+          `;
+          tooltipEl.style.transform = `translate3d(${state.hover.x + 16}px, ${state.hover.y + 16}px, 0)`;
+          tooltipEl.classList.add('visible');
+
+          // ----- PANEL (fixo) -----
+          const winner = match.winnerId != null
+            ? (match.home?.id === match.winnerId ? match.home : match.away)
+            : null;
+          const winnerName = winner?.name || '';
+
+          panelEl.innerHTML = `
+            <div class="match-title">
+              <span>${home}</span>
+              <span style="color:#6b7280;margin:0 4px;">vs</span>
+              <span>${away}</span>
+            </div>
+            <div class="match-score">${score}</div>
+            <div class="match-detail">
+              🏆 ${stage}
+              ${winnerName ? ` — 🏅 <strong style="color:#d9a531;">${winnerName}</strong>` : ''}
+            </div>
+            <div class="match-detail">📅 ${date} • 🕘 ${time}</div>
+            ${match.isLive ? '<div class="match-detail live">🔴 AO VIVO</div>' : ''}
+          `;
+          panelEl.classList.add('visible');
+        } else {
+          // Se não encontrar match, esconde tudo
+          tooltipEl.classList.remove('visible');
+          panelEl.classList.remove('visible');
+        }
+      }
+
+      /* =========================
+         START
+      ========================= */
+
+      function init() {
+        safeBind();
+        load();
+        setInterval(load, 90000);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+    })();
+  </script>
 </body>
 </html>
