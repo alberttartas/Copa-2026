@@ -962,195 +962,203 @@
     }
 
     function render(data) {
-      clear(svg);
-      allNodeGroups = [];
-      drawBackground();
+  clear(svg);
+  allNodeGroups = [];
+  drawBackground();
 
-      const rounds = data.rounds || [];
-      if (rounds.length === 0) {
-        statusEl.innerHTML = `Ainda sem confrontos de mata-mata publicados pela API.`;
-        return;
+  const rounds = data.rounds || [];
+  if (rounds.length === 0) {
+    statusEl.innerHTML = `Ainda sem confrontos de mata-mata publicados pela API.`;
+    return;
+  }
+
+  // Fase inicial - monta os nós da primeira fase
+  const firstRound = rounds[0];
+  const matches = firstRound.matches;
+  const N = matches.length;
+  const step = 360 / N;
+  
+  // Mapa para armazenar os nós de cada fase
+  let currentNodes = [];
+  
+  // Criar nós para a primeira fase
+  matches.forEach((match, idx) => {
+    const angle = idx * step;
+    const branchIdx = Math.floor(idx / (N / 8)) % 8;
+    
+    // Nó do time da casa (se existir e não for TBD)
+    if (match.home && match.home.id) {
+      const homeNode = {
+        team: match.home,
+        angle: angle - step / 4,
+        branchIdx: branchIdx,
+        matchId: match.id,
+        isHome: true,
+        matchData: match
+      };
+      currentNodes.push(homeNode);
+    }
+    
+    // Nó do time visitante (se existir e não for TBD)
+    if (match.away && match.away.id) {
+      const awayNode = {
+        team: match.away,
+        angle: angle + step / 4,
+        branchIdx: branchIdx,
+        matchId: match.id,
+        isHome: false,
+        matchData: match
+      };
+      currentNodes.push(awayNode);
+    }
+  });
+
+  // Desenhar nós da primeira fase
+  currentNodes.forEach((node) => {
+    const matchData = node.matchData;
+    const team = node.team;
+    team._matchData = {
+      opponent: node.isHome ? matchData.away : matchData.home,
+      homeName: matchData.home?.name || '—',
+      awayName: matchData.away?.name || '—',
+      score: matchData.score ? `${matchData.score.home ?? '?'} × ${matchData.score.away ?? '?'}` : '—',
+      stage: firstRound.label || 'Oitavas de 32',
+      date: new Date(matchData.date).toLocaleDateString('pt-BR'),
+      time: new Date(matchData.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}),
+      status: matchData.status || 'SCHEDULED',
+      isUpcoming: ['SCHEDULED', 'TIMED'].includes(matchData.status),
+      isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(matchData.status),
+      isFinished: matchData.status === 'FINISHED',
+      statusLabel: STATUS_LABELS[matchData.status] || matchData.status || 'EM BREVE',
+      venue: matchData.venue || 'Estádio a definir'
+    };
+    
+    teamNode(team, LEVEL_R[0], node.angle, BRANCH_COLORS[node.branchIdx], false, NODE_SIZE[0], 0);
+  });
+
+  // Processar TODAS as fases seguintes
+  let previousNodes = currentNodes;
+  
+  // Começar do índice 1 (segunda fase) até o final
+  for (let ri = 1; ri < rounds.length; ri++) {
+    const round = rounds[ri];
+    const r1 = LEVEL_R[ri - 1];
+    const r2 = LEVEL_R[ri];
+    const rMid = (r1 + r2) / 2;
+    
+    const nextNodes = [];
+    
+    // Para cada jogo da fase atual
+    for (const match of round.matches) {
+      // Procurar o time da casa na fase anterior
+      const homeNode = previousNodes.find(n => 
+        n.team.id === match.home?.id || 
+        n.team.code === match.home?.code
+      );
+      
+      // Procurar o time visitante na fase anterior
+      const awayNode = previousNodes.find(n => 
+        n.team.id === match.away?.id || 
+        n.team.code === match.away?.code
+      );
+      
+      // Se não encontrou os dois times, pode ser TBD - pular
+      if (!homeNode || !awayNode) {
+        continue;
       }
-
-      // Fase inicial (oitavas de 32) - monta os nós da primeira fase
-      const firstRound = rounds[0];
-      const matches = firstRound.matches;
-      const N = matches.length;
-      const step = 360 / N;
       
-      // Mapa para armazenar os nós de cada fase
-      let currentNodes = [];
+      const childAngle = (homeNode.angle + awayNode.angle) / 2;
       
-      // Criar nós para a primeira fase
-      matches.forEach((match, idx) => {
-        const angle = idx * step;
-        const branchIdx = Math.floor(idx / (N / 8)) % 8;
-        
-        // Nó do time da casa
-        if (match.home && match.home.id) {
-          const homeNode = {
-            team: match.home,
-            angle: angle - step / 4,
-            branchIdx: branchIdx,
-            matchId: match.id,
-            isHome: true,
-            matchData: match
-          };
-          currentNodes.push(homeNode);
-        }
-        
-        // Nó do time visitante
-        if (match.away && match.away.id) {
-          const awayNode = {
-            team: match.away,
-            angle: angle + step / 4,
-            branchIdx: branchIdx,
-            matchId: match.id,
-            isHome: false,
-            matchData: match
-          };
-          currentNodes.push(awayNode);
-        }
-      });
-
-      // Desenhar nós da primeira fase
-      currentNodes.forEach((node) => {
-        const matchData = node.matchData;
-        const team = node.team;
-        team._matchData = {
-          opponent: node.isHome ? matchData.away : matchData.home,
-          homeName: matchData.home?.name || '—',
-          awayName: matchData.away?.name || '—',
-          score: matchData.score ? `${matchData.score.home ?? '?'} × ${matchData.score.away ?? '?'}` : '—',
-          stage: firstRound.label || 'Oitavas de 32',
-          date: new Date(matchData.date).toLocaleDateString('pt-BR'),
-          time: new Date(matchData.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}),
-          status: matchData.status || 'SCHEDULED',
-          isUpcoming: ['SCHEDULED', 'TIMED'].includes(matchData.status),
-          isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(matchData.status),
-          isFinished: matchData.status === 'FINISHED',
-          statusLabel: STATUS_LABELS[matchData.status] || matchData.status || 'EM BREVE',
-          venue: matchData.venue || 'Estádio a definir'
-        };
-        
-        teamNode(team, LEVEL_R[0], node.angle, BRANCH_COLORS[node.branchIdx], false, NODE_SIZE[0], 0);
-      });
-
-      // Processar as fases seguintes
-      let previousNodes = currentNodes;
+      // Determinar o vencedor
+      let winnerTeam = null;
+      let decided = false;
       
-      for (let ri = 1; ri < rounds.length; ri++) {
-        const round = rounds[ri];
-        const r1 = LEVEL_R[ri - 1];
-        const r2 = LEVEL_R[ri];
-        const rMid = (r1 + r2) / 2;
-        const isFinal = ri === rounds.length - 1;
-        
-        const nextNodes = [];
-        
-        // Para cada jogo da fase atual, encontrar os times que se enfrentam
-        for (const match of round.matches) {
-          // Procurar o time da casa na fase anterior
-          const homeNode = previousNodes.find(n => 
-            n.team.id === match.home?.id || 
-            n.team.code === match.home?.code
-          );
-          
-          // Procurar o time visitante na fase anterior
-          const awayNode = previousNodes.find(n => 
-            n.team.id === match.away?.id || 
-            n.team.code === match.away?.code
-          );
-          
-          if (!homeNode || !awayNode) {
-            // Se não encontrou, pode ser um time que ainda vai ser definido (TBD)
-            continue;
-          }
-          
-          const childAngle = (homeNode.angle + awayNode.angle) / 2;
-          const winnerTeam = match.winnerId != null
-            ? (match.home?.id === match.winnerId ? match.home : match.away)
-            : null;
-          const decided = !!winnerTeam;
-          const winnerIsHome = decided && match.home?.id === match.winnerId;
-          const branchIdx = decided ? (winnerIsHome ? homeNode.branchIdx : awayNode.branchIdx) : homeNode.branchIdx;
-          const color = decided ? BRANCH_COLORS[branchIdx] : GREY;
-          
-          // Guardar dados do jogo para tooltip
-          const matchData = {
-            opponent: decided ? (winnerIsHome ? match.away : match.home) : null,
-            homeName: match.home?.name || '—',
-            awayName: match.away?.name || '—',
-            score: decided ? `${match.score?.home ?? '?'} × ${match.score?.away ?? '?'}` : '—',
-            stage: round.label || `Fase ${ri + 1}`,
-            date: new Date(match.date).toLocaleDateString('pt-BR'),
-            time: new Date(match.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}),
-            status: match.status || 'SCHEDULED',
-            isUpcoming: ['SCHEDULED', 'TIMED'].includes(match.status),
-            isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
-            isFinished: match.status === 'FINISHED',
-            statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE',
-            venue: match.venue || 'Estádio a definir'
-          };
-
-          const glowLevel = Math.min(ri, GLOW_AMOUNT.length);
-          const lineWidth = Math.min(ri, LINE_WIDTH.length);
-
-          // Desenhar conector
-          connector(r1, homeNode.angle, awayNode.angle, rMid, childAngle, r2, color, glowLevel, lineWidth);
-
-          const teamObj = winnerTeam || { 
-            name: `${homeNode.team?.name ?? '?'} / ${awayNode.team?.name ?? '?'} — a definir`, 
-            logo: null,
-            _matchData: matchData,
-            id: match.winnerId || null,
-            code: match.winnerId ? (winnerIsHome ? match.home?.code : match.away?.code) : null
-          };
-          teamObj._matchData = matchData;
-
-          nextNodes.push({
-            team: teamObj,
-            angle: childAngle,
-            decided: decided,
-            branchIdx: branchIdx,
-            matchId: match.id
-          });
-        }
-
-        // Desenhar os nós desta fase
-        const sizeIdx = Math.min(ri, NODE_SIZE.length - 1);
-        const glowIdx = Math.min(ri, GLOW_AMOUNT.length - 1);
-        const isChampion = ri === rounds.length - 1;
-
-        nextNodes.forEach((n, idx) => {
-          const isChampionNode = isChampion && n.decided && idx === 0;
-          teamNode(
-            n.team,
-            LEVEL_R[ri],
-            n.angle,
-            n.decided ? BRANCH_COLORS[n.branchIdx] : GREY,
-            !n.decided,
-            NODE_SIZE[sizeIdx],
-            n.decided ? glowIdx : 0,
-            isChampionNode
-          );
-        });
-
-        previousNodes = nextNodes;
+      if (match.winnerId != null) {
+        decided = true;
+        winnerTeam = match.home?.id === match.winnerId ? match.home : match.away;
       }
+      
+      const winnerIsHome = decided && match.home?.id === match.winnerId;
+      const branchIdx = decided ? (winnerIsHome ? homeNode.branchIdx : awayNode.branchIdx) : homeNode.branchIdx;
+      const color = decided ? BRANCH_COLORS[branchIdx] : GREY;
+      
+      // Guardar dados do jogo
+      const matchData = {
+        opponent: decided ? (winnerIsHome ? match.away : match.home) : null,
+        homeName: match.home?.name || '—',
+        awayName: match.away?.name || '—',
+        score: decided ? `${match.score?.home ?? '?'} × ${match.score?.away ?? '?'}` : '—',
+        stage: round.label || `Fase ${ri + 1}`,
+        date: new Date(match.date).toLocaleDateString('pt-BR'),
+        time: new Date(match.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}),
+        status: match.status || 'SCHEDULED',
+        isUpcoming: ['SCHEDULED', 'TIMED'].includes(match.status),
+        isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
+        isFinished: match.status === 'FINISHED',
+        statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE',
+        venue: match.venue || 'Estádio a definir'
+      };
 
-      drawTrophy();
+      const glowLevel = Math.min(ri, GLOW_AMOUNT.length);
+      const lineWidth = Math.min(ri, LINE_WIDTH.length);
 
-      // Trazer nós para frente
-      allNodeGroups.forEach((g) => svg.appendChild(g));
+      // DESENHAR CONECTOR entre os times
+      connector(r1, homeNode.angle, awayNode.angle, rMid, childAngle, r2, color, glowLevel, lineWidth);
 
-      updateLivePanel(data);
+      // Criar o time vencedor ou TBD
+      const teamObj = winnerTeam || { 
+        name: `${homeNode.team?.name ?? '?'} / ${awayNode.team?.name ?? '?'} — a definir`, 
+        logo: null,
+        _matchData: matchData,
+        id: match.winnerId || null,
+        code: match.winnerId ? (winnerIsHome ? match.home?.code : match.away?.code) : null
+      };
+      teamObj._matchData = matchData;
 
-      const ts = new Date(data.updatedAt).toLocaleString("pt-BR");
-      statusEl.innerHTML = `Atualizado em ${ts} <button id="refreshBtn">Atualizar agora</button>`;
-      document.getElementById("refreshBtn")?.addEventListener("click", load);
+      // Adicionar à lista de nós da próxima fase
+      nextNodes.push({
+        team: teamObj,
+        angle: childAngle,
+        decided: decided,
+        branchIdx: branchIdx,
+        matchId: match.id
+      });
     }
 
+    // Desenhar os nós DESTA fase
+    const sizeIdx = Math.min(ri, NODE_SIZE.length - 1);
+    const glowIdx = Math.min(ri, GLOW_AMOUNT.length - 1);
+    const isChampion = ri === rounds.length - 1;
+
+    nextNodes.forEach((n, idx) => {
+      const isChampionNode = isChampion && n.decided && idx === 0;
+      teamNode(
+        n.team,
+        LEVEL_R[ri],
+        n.angle,
+        n.decided ? BRANCH_COLORS[n.branchIdx] : GREY,
+        !n.decided,
+        NODE_SIZE[sizeIdx],
+        n.decided ? glowIdx : 0,
+        isChampionNode
+      );
+    });
+
+    // Atualizar previousNodes para a PRÓXIMA iteração
+    previousNodes = nextNodes;
+  }
+
+  drawTrophy();
+
+  // Trazer nós para frente
+  allNodeGroups.forEach((g) => svg.appendChild(g));
+
+  updateLivePanel(data);
+
+  const ts = new Date(data.updatedAt).toLocaleString("pt-BR");
+  statusEl.innerHTML = `Atualizado em ${ts} <button id="refreshBtn">Atualizar agora</button>`;
+  document.getElementById("refreshBtn")?.addEventListener("click", load);
+}
     async function load() {
       statusEl.textContent = "Atualizando…";
       try {
