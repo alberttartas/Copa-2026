@@ -1,5 +1,5 @@
 // ============================================================
-// BRACKET CIRCULAR – COPA DO MUNDO 2026 (VERSÃO COM TACA.GIF)
+// BRACKET CIRCULAR – COPA DO MUNDO 2026 (VERSÃO COM INTERAÇÃO)
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -16,6 +16,7 @@ const state = {
   rounds: [],
   leaves: [],
   hover: null,
+  selectedMatchId: null, // Armazena a partida fixada pelo clique
   updatedAt: null,
   loading: false,
 };
@@ -32,6 +33,18 @@ const TEAM_COLORS = {
   BRA: '#cc9a18', FRA: '#1e4391', CAN: '#b51219', MAR: '#0d6130',
   NOR: '#a61423', MEX: '#0b4728', ENG: '#d1d1d1', ARG: '#5b96cb',
   GER: '#d1d1d1', POR: '#991116', ESP: '#bd1117', USA: '#042247'
+};
+
+// Banco de dados Mock para Artilheiros (Substitua/integre com os dados reais da sua API se preferir)
+const SCORERS_DB = {
+  BRA: { name: 'Vinícius Jr.', goals: 5 },
+  FRA: { name: 'Kylian Mbappé', goals: 6 },
+  ARG: { name: 'Lionel Messi', goals: 4 },
+  POR: { name: 'Cristiano Ronaldo', goals: 3 },
+  ENG: { name: 'Harry Kane', goals: 4 },
+  NOR: { name: 'Erling Haaland', goals: 5 },
+  ESP: { name: 'Lamine Yamal', goals: 3 },
+  GER: { name: 'Jamal Musiala', goals: 4 }
 };
 
 // ============================================================
@@ -51,7 +64,6 @@ const POSITION_ORDER = [
   'SUI', 'ALG', 'COL', 'GHA',   // pos 12-15 (Suíça/Argélia, Colômbia/Gana)
 ];
 
-// Mapeamento de ângulos fixo (Metade Esquerda e Metade Direita)
 const INDEX_GEOMETRY_MAP = {
   0:  { side: 'left',  pos: 0  }, 1:  { side: 'left',  pos: 1  },
   2:  { side: 'left',  pos: 2  }, 3:  { side: 'left',  pos: 3  },
@@ -121,9 +133,6 @@ function buildFixedLayout() {
   return layout;
 }
 
-// ============================================================
-// CONVERSOR: CORREÇÃO DE SUBIDA E HERANÇA CONTÍNUA
-// ============================================================
 function mapApiToSlots() {
   const layout = buildFixedLayout();
   const round0Matches = state.rounds[0]?.matches || [];
@@ -136,7 +145,6 @@ function mapApiToSlots() {
     if (awayCode) teamByCode[awayCode] = { team: match.away, match };
   }
 
-  const usedCodes = new Set();
   const leftoverEntries = [];
   for (const code in teamByCode) {
     if (!POSITION_ORDER.includes(code)) leftoverEntries.push(teamByCode[code]);
@@ -153,12 +161,10 @@ function mapApiToSlots() {
     }
 
     if (entry) {
-      usedCodes.add(entry.team?.code?.toUpperCase());
       slot.team = entry.team;
       slot.matchId = entry.match.fixtureId;
       const match = entry.match;
       
-      // Define se o time foi eliminado logo na primeira rodada
       if (match.status === 'FINISHED' && match.winnerId && match.winnerId !== entry.team.id) {
         slot.isEliminated = true;
       }
@@ -168,7 +174,6 @@ function mapApiToSlots() {
     }
   }
 
-  // Subida hierárquica corrigida para herdar os vencedores mesmo com delay da API
   for (let r = 1; r < layout.length; r++) {
     const currentLayer = layout[r];
     const prevLayer = layout[r - 1];
@@ -179,7 +184,6 @@ function mapApiToSlots() {
       const pai1 = prevLayer[i * 2];
       const pai2 = prevLayer[i * 2 + 1];
 
-      // Tenta acoplar a partida correspondente da rodada atual via IDs dos pais
       const match = currentRoundMatches.find(m => 
         (pai1.team?.id && (m.home?.id === pai1.team.id || m.away?.id === pai1.team.id)) ||
         (pai2.team?.id && (m.home?.id === pai2.team.id || m.away?.id === pai2.team.id))
@@ -204,7 +208,6 @@ function mapApiToSlots() {
           if (pai1.team && pai1.team.id === winner.id) { pai1.isWinner = true; pai2.isEliminated = true; }
           if (pai2.team && pai2.team.id === winner.id) { pai2.isWinner = true; pai1.isEliminated = true; }
         } else {
-          // Se a partida está definida mas não finalizada, projeta na tela quem já chegou aqui
           if (match.home && (pai1.team?.id === match.home.id || pai2.team?.id === match.home.id)) {
              slotFilho.team = match.home;
           } else if (match.away && (pai1.team?.id === match.away.id || pai2.team?.id === match.away.id)) {
@@ -219,7 +222,6 @@ function mapApiToSlots() {
           slotFilho.isWinner = false;
         }
       } else {
-        // CORREÇÃO CIRÚRGICA: Se a API ainda não processou o nó superior, herda o nó pai vitorioso
         if (pai1.isWinner && !pai1.isEliminated) {
           slotFilho.team = pai1.team;
         } else if (pai2.isWinner && !pai2.isEliminated) {
@@ -374,12 +376,21 @@ function drawNode(slot) {
     g.appendChild(t);
   }
 
+  // Evento de passar o mouse (Tooltip flutuante básico)
   g.onmouseenter = (e) => {
     const rect = svgLayer.getBoundingClientRect();
     state.hover = { x: e.clientX - rect.left, y: e.clientY - rect.top, matchId };
-    renderUI();
+    renderTooltipOnly();
   };
-  g.onmouseleave = () => { state.hover = null; renderUI(); };
+  g.onmouseleave = () => { state.hover = null; renderTooltipOnly(); };
+
+  // MUDANÇA INTERATIVA: Clique fixa a partida selecionada e renderiza o grande painel lateral/central
+  g.onclick = () => {
+    if (matchId) {
+      state.selectedMatchId = matchId;
+      renderInteractivePanel();
+    }
+  };
 
   svgLayer.appendChild(g);
 }
@@ -389,7 +400,6 @@ function polar(r, a) {
   return [CX + r * Math.sin(a), CY - r * Math.cos(a)];
 }
 
-// Elementos Namespace SVG
 function elNS(tag, attrs = {}) {
   const el = document.createElementNS(NS, tag);
   for (const k in attrs) el.setAttribute(k, attrs[k]);
@@ -415,9 +425,6 @@ function drawBackground() {
   });
 }
 
-// ============================================================
-// INJEÇÃO DA TAÇA EM GIF
-// ============================================================
 function drawTrophy() {
   const g = elNS('g');
   g.appendChild(elNS('circle', { cx: CX, cy: CY, r: 52, fill: '#010102', stroke: '#18140b', 'stroke-width': 1.5 }));
@@ -435,13 +442,13 @@ function drawTrophy() {
   svgLayer.appendChild(g);
 }
 
-function renderUI() {
-  if (!tooltipEl || !panelEl) return;
+// ---------- INTERFACES DE PREVIEW E DETALHES ----------
+function renderTooltipOnly() {
+  if (!tooltipEl) return;
   const hover = state.hover;
 
   if (!hover) {
     tooltipEl.classList.remove('visible');
-    panelEl.classList.remove('visible');
     return;
   }
 
@@ -453,20 +460,106 @@ function renderUI() {
 
   if (!match) {
     tooltipEl.classList.remove('visible');
-    panelEl.classList.remove('visible');
     return;
   }
 
   const home = match.home?.name || 'TBD';
   const away = match.away?.name || 'TBD';
-  const score = match.status === 'FINISHED' ? `${match.score?.home ?? 0} – ${match.score?.away ?? 0}` : 'VS';
-  const stage = match.stage || 'Eliminatória';
+  const score = match.status === 'FINISHED' ? `${match.score?.home ?? 0} – ${match.score?.away ?? 0}` : 'A Jogar';
 
-  tooltipEl.innerHTML = `<div><strong>${home}</strong> vs <strong>${away}</strong></div><div class="score">${score}</div>`;
+  tooltipEl.innerHTML = `<div><strong>${home}</strong> vs <strong>${away}</strong></div><div class="score" style="font-size:11px;color:#cc9a18;margin-top:2px;">${score}</div>`;
   tooltipEl.style.transform = `translate3d(${hover.x + 16}px, ${hover.y + 16}px, 0)`;
   tooltipEl.classList.add('visible');
+}
 
-  panelEl.innerHTML = `<div class="match-title">${home} vs ${away}</div><div class="match-score">${score}</div><div class="match-detail">🏆 ${stage}</div>`;
+// LÓGICA DE CLIQUE: Renderiza as informações avançadas solicitadas no painel lateral fixo
+function renderInteractivePanel() {
+  if (!panelEl || !state.selectedMatchId) return;
+
+  let match = null;
+  let currentRoundIdx = 0;
+  for (let i = 0; i < state.rounds.length; i++) {
+    const found = state.rounds[i].matches?.find((m) => m.fixtureId === state.selectedMatchId);
+    if (found) { match = found; currentRoundIdx = i; break; }
+  }
+
+  if (!match) return;
+
+  const homeName = match.home?.name || 'A definir';
+  const awayName = match.away?.name || 'A definir';
+  const homeCode = match.home?.code?.toUpperCase();
+  const awayCode = match.away?.code?.toUpperCase();
+  const stage = match.stage || 'Copa do Mundo';
+
+  // Formatação de data e hora do jogo
+  let matchTimeHtml = '';
+  if (match.date) {
+    const dateObj = new Date(match.date);
+    const dateStr = dateObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    const timeStr = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    matchTimeHtml = `<div class="match-time-badge" style="color: #a4a4a8; font-size: 12px; margin-top: 4px;">📅 ${dateStr} às ${timeStr}</div>`;
+  }
+
+  let contentHtml = `
+    <div style="position: relative; padding: 12px;">
+      <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #cc9a18; font-weight: bold; margin-bottom: 8px;">🏆 ${stage}</div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <!-- Mandante -->
+        <div style="text-align: center; flex: 1;">
+          ${homeCode ? `<img src="assets/img/federations/${homeCode}.svg" width="36" height="36" onerror="this.style.display='none'" style="margin-bottom:4px;" />` : ''}
+          <div style="font-weight: bold; font-size: 14px; color: #fff;">${homeName}</div>
+        </div>
+        
+        <!-- Placar Central / VS -->
+        <div style="padding: 0 10px; text-align: center;">
+          ${match.status === 'FINISHED' 
+            ? `<div style="font-size: 22px; font-weight: 900; color: #cc9a18; letter-spacing: 2px;">${match.score?.home ?? 0}-${match.score?.away ?? 0}</div>`
+            : `<div style="font-size: 14px; font-weight: bold; background: #1a1a1e; padding: 4px 10px; border-radius: 4px; color: #71717a;">VS</div>`
+          }
+        </div>
+
+        <!-- Visitante -->
+        <div style="text-align: center; flex: 1;">
+          ${awayCode ? `<img src="assets/img/federations/${awayCode}.svg" width="36" height="36" onerror="this.style.display='none'" style="margin-bottom:4px;" />` : ''}
+          <div style="font-weight: bold; font-size: 14px; color: #fff;">${awayName}</div>
+        </div>
+      </div>
+      <div style="text-align: center; margin-bottom: 15px;">${matchTimeHtml}</div>
+  `;
+
+  // SE O JOGO JÁ ACONTECEU: Mostrar dados da partida e principais artilheiros das seleções envolvidas
+  if (match.status === 'FINISHED') {
+    contentHtml += `<div style="border-top: 1px solid #1f1f23; padding-top: 10px;">
+      <div style="font-size: 12px; font-weight: bold; color: #e4e4e7; margin-bottom: 8px; text-align: center;">🎯 Artilheiros das Seleções</div>
+      <div style="display: flex; gap: 8px; justify-content: space-around;">`;
+
+    [homeCode, awayCode].forEach(code => {
+      if (code && SCORERS_DB[code]) {
+        const scorer = SCORERS_DB[code];
+        contentHtml += `
+          <div style="text-align: center; background: #0c0c0e; border: 1px solid #1a1a1e; padding: 6px; border-radius: 6px; width: 45%;">
+            <img src="assets/img/art/${code}.png" width="48" height="48" style="border-radius: 50%; object-fit: cover; border: 1px solid #cc9a18; background:#141416;" onerror="this.src='https://flagcdn.com/${code.toLowerCase().substring(0,2)}.svg'; this.style.borderRadius='4px';" />
+            <div style="font-size: 11px; font-weight: bold; color: #fff; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${scorer.name}</div>
+            <div style="font-size: 10px; color: #cc9a18;">⚽ ${scorer.goals} Gols</div>
+          </div>`;
+      }
+    });
+
+    contentHtml += `</div></div>`;
+  } 
+  // SE O JOGO NÃO ACONTECEU AINDA: Mostrar informações das seleções e contagem regressiva/chamada para a partida
+  else {
+    contentHtml += `
+      <div style="border-top: 1px solid #1f1f23; padding-top: 12px; text-align: center; background: #0a0a0c; border-radius: 6px; padding: 10px;">
+        <div style="font-size: 11px; color: #a1a1aa; line-height: 1.4;">
+          Confronto decisivo aguardando o apito inicial. O vencedor avança direto para a próxima fase do chaveamento no anel interno!
+        </div>
+      </div>
+    `;
+  }
+
+  contentHtml += `</div>`;
+  panelEl.innerHTML = contentHtml;
   panelEl.classList.add('visible');
 }
 
@@ -481,6 +574,11 @@ async function load() {
     state.leaves = data.leaves || [];
     state.updatedAt = data.updatedAt || null;
     render();
+    
+    // Mantém o painel interativo renderizado se houver uma seleção ativa durante o live update
+    if (state.selectedMatchId) {
+      renderInteractivePanel();
+    }
   } catch (e) {
     if (statusText) statusText.textContent = '❌ Erro na requisição';
   } finally {
