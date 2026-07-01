@@ -1,5 +1,5 @@
 // ============================================================
-// BRACKET CIRCULAR – LAYOUT FIXO (ARQUITETURA ESPORTIVA)
+// BRACKET CIRCULAR – LAYOUT FIXO (GEOMETRIA DETERMINÍSTICA)
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -37,116 +37,119 @@ const COLORS = [
 const GREY = '#3c3c40';
 
 // ============================================================
-// LAYOUT FIXO – POSIÇÕES PRÉ-DEFINIDAS
+// GEOMETRIA FIXA – POSIÇÃO DETERMINÍSTICA
 // ============================================================
-const TOTAL_ROUNDS = 6; // leaves + 5 fases
 
-function buildFixedLayout() {
-  const positions = [];
-  const slotMap = new Map();
+function getNodePosition(roundIndex, nodeIndex, totalLeaves) {
+  const count = totalLeaves / Math.pow(2, roundIndex);
+  const angleStep = (2 * Math.PI) / count;
+  const angle = nodeIndex * angleStep - Math.PI / 2;
+  return { angle, count };
+}
 
-  // Níveis: [folhas, r16, qf, sf, final, campeão]
-  const radii = LEVEL_R;
+// ============================================================
+// LAYOUT PRÉ-CALCULADO (FIXO, NUNCA MUDA)
+// ============================================================
 
-  for (let r = 0; r < radii.length; r++) {
-    const count = Math.pow(2, 5 - r); // 32, 16, 8, 4, 2, 1
+function buildFixedLayout(totalLeaves) {
+  const slots = [];
+
+  // Número total de rounds (folhas + fases seguintes)
+  const totalRounds = Math.ceil(Math.log2(totalLeaves)) + 1;
+
+  for (let r = 0; r < totalRounds; r++) {
+    const count = Math.max(1, totalLeaves / Math.pow(2, r));
     const layer = [];
 
     for (let i = 0; i < count; i++) {
-      const angle = (i / count) * 2 * Math.PI - Math.PI / 2;
-      const id = `r${r}-${i}`;
+      const { angle } = getNodePosition(r, i, totalLeaves);
+      const radius = LEVEL_R[r] || LEVEL_R[LEVEL_R.length - 1];
 
-      const slot = {
-        id,
+      layer.push({
         round: r,
         index: i,
-        r: radii[r],
         angle,
-        x: CX + radii[r] * Math.sin(angle),
-        y: CY - radii[r] * Math.cos(angle),
-        team: null, // preenchido pela API
+        radius,
+        x: CX + radius * Math.sin(angle),
+        y: CY - radius * Math.cos(angle),
+        team: null,
         matchId: null,
         isPending: true,
         isWinner: false,
-      };
-
-      layer.push(slot);
-      slotMap.set(id, slot);
+        colorIndex: i % COLORS.length,
+      });
     }
 
-    positions.push(layer);
+    slots.push(layer);
   }
 
-  return { positions, slotMap };
+  return slots;
 }
 
-// Layout fixo (nunca muda)
-const { positions, slotMap } = buildFixedLayout();
-
 // ============================================================
-// MAPEAMENTO: SLOT → MATCH (por índice)
+// MAPEAMENTO: DADOS DA API → SLOTS FIXOS
 // ============================================================
-function mapMatchesToSlots(rounds, leaves) {
-  // Primeira fase: leaves preenchem os slots da camada 0
-  const leafSlots = positions[0] || [];
 
-  // Mapear leaves para slots (2 por match)
-  const slotMapping = new Map();
+function mapApiToSlots(leaves, rounds) {
+  const totalLeaves = leaves.length;
+  const layout = buildFixedLayout(totalLeaves);
 
-  // Preencher slots da primeira fase com leaves
+  // ---------- ROUND 0: FOLHAS ----------
+  const leafSlots = layout[0] || [];
   leaves.forEach((team, i) => {
     if (i < leafSlots.length) {
-      const slot = leafSlots[i];
-      slot.team = team;
-      slot.isPending = false;
-      slot.matchId = null;
-      slotMapping.set(slot.id, { team, isLeaf: true });
+      leafSlots[i].team = team;
+      leafSlots[i].isPending = false;
+      leafSlots[i].matchId = null;
+      leafSlots[i].isWinner = false;
     }
   });
 
-  // Preencher slots das fases seguintes a partir dos rounds
+  // ---------- ROUNDS SEGUINTES ----------
   for (let ri = 0; ri < rounds.length; ri++) {
     const round = rounds[ri];
     const matches = round.matches || [];
-    const nextLayer = positions[ri + 1] || [];
+    const nextLayer = layout[ri + 1] || [];
 
-    for (let i = 0; i < matches.length; i++) {
+    for (let i = 0; i < matches.length && i < nextLayer.length; i++) {
       const match = matches[i];
       const slot = nextLayer[i];
 
-      if (slot) {
-        // Determinar vencedor
-        let winner = null;
-        if (match.winnerId != null) {
-          winner = match.home?.id === match.winnerId ? match.home : match.away;
-        } else if (match.status === 'FINISHED' && match.score) {
-          const h = match.score?.home ?? 0;
-          const a = match.score?.away ?? 0;
-          if (h > a) winner = match.home;
-          else if (a > h) winner = match.away;
-          else if (match.score?.penalties) {
-            const ph = match.score.penalties?.home ?? 0;
-            const pa = match.score.penalties?.away ?? 0;
-            if (ph > pa) winner = match.home;
-            else if (pa > ph) winner = match.away;
-          }
-        }
+      // Determinar vencedor
+      let winner = null;
+      let decided = false;
 
-        slot.team = winner || null;
-        slot.isPending = !winner;
-        slot.matchId = match.fixtureId;
-        slot.isWinner = !!winner;
-        slotMapping.set(slot.id, { team: slot.team, match, isWinner: !!winner });
+      if (match.winnerId != null) {
+        decided = true;
+        winner = match.home?.id === match.winnerId ? match.home : match.away;
+      } else if (match.status === 'FINISHED' && match.score) {
+        const h = match.score?.home ?? 0;
+        const a = match.score?.away ?? 0;
+        if (h > a) { decided = true;
+          winner = match.home; } else if (a > h) { decided = true;
+          winner = match.away; } else if (match.score?.penalties) {
+          const ph = match.score.penalties?.home ?? 0;
+          const pa = match.score.penalties?.away ?? 0;
+          if (ph > pa) { decided = true;
+            winner = match.home; } else if (pa > ph) { decided = true;
+            winner = match.away; }
+        }
       }
+
+      slot.team = winner || null;
+      slot.isPending = !decided;
+      slot.matchId = match.fixtureId;
+      slot.isWinner = decided;
     }
   }
 
-  return slotMapping;
+  return layout;
 }
 
 // ============================================================
 // RENDER SVG (USANDO LAYOUT FIXO)
 // ============================================================
+
 function render() {
   if (!svgLayer) return;
   clearSVG();
@@ -157,30 +160,31 @@ function render() {
     return;
   }
 
-  // Mapear dados para slots fixos
-  const slotMapping = mapMatchesToSlots(rounds, leaves);
+  // Layout fixo com dados da API
+  const layout = mapApiToSlots(leaves, rounds);
 
   // ---------- FUNDO ----------
   drawBackground();
 
-  // ---------- DESENHAR CONEXÕES (FIXAS) ----------
-  drawFixedConnections();
+  // ---------- CONEXÕES FIXAS ----------
+  drawFixedConnections(layout);
 
-  // ---------- DESENHAR NÓS ----------
-  for (const layer of positions) {
+  // ---------- NÓS ----------
+  for (const layer of layout) {
     for (const slot of layer) {
       const team = slot.team;
       const isPending = slot.isPending;
-      const color = isPending ? GREY : COLORS[slot.index % COLORS.length];
+      const isWinner = slot.isWinner;
+      const color = isPending ? GREY : COLORS[slot.colorIndex];
 
       drawNode(
-        team || { code: 'TBD', name: 'TBD' },
-        slot.r,
+        team || { code: 'TBD', name: 'TBD', id: null },
+        slot.radius,
         slot.angle,
         color,
         isPending,
         slot.matchId,
-        slot.isWinner
+        isWinner
       );
     }
   }
@@ -198,15 +202,17 @@ function render() {
 }
 
 // ============================================================
-// CONEXÕES FIXAS (PRÉ-DEFINIDAS)
+// CONEXÕES FIXAS (PRÉ-DEFINIDAS, GEOMETRIA PURA)
 // ============================================================
-function drawFixedConnections() {
-  // Para cada round, conectar slots pai → filho
-  for (let r = 0; r < positions.length - 1; r++) {
-    const currentLayer = positions[r];
-    const nextLayer = positions[r + 1];
 
-    const r1 = LEVEL_R[r];
+function drawFixedConnections(layout) {
+  for (let r = 0; r < layout.length - 1; r++) {
+    const currentLayer = layout[r];
+    const nextLayer = layout[r + 1];
+
+    if (!currentLayer || !nextLayer) continue;
+
+    const r1 = LEVEL_R[r] || LEVEL_R[0];
     const rMid = (LEVEL_R[r] + LEVEL_R[r + 1]) / 2;
 
     for (let i = 0; i < currentLayer.length; i += 2) {
@@ -216,17 +222,16 @@ function drawFixedConnections() {
 
       if (!parent1 || !parent2 || !child) continue;
 
-      const color = COLORS[Math.floor(i / 2) % COLORS.length];
+      const color = COLORS[child.colorIndex % COLORS.length];
 
-      // Conexão com Bézier fixa
       drawBezierConnection(
-        parent1.r,
+        parent1.radius,
         parent1.angle,
-        parent2.r,
+        parent2.radius,
         parent2.angle,
         rMid,
         child.angle,
-        child.r,
+        child.radius,
         color
       );
     }
@@ -234,8 +239,9 @@ function drawFixedConnections() {
 }
 
 // ============================================================
-// CONEXÃO POR BÉZIER
+// CONEXÃO POR BÉZIER (SUAVE)
 // ============================================================
+
 function drawBezierConnection(r1, angleA, r2, angleB, rMid, childAngle, rChild, color) {
   if (!isFinite(angleA) || !isFinite(angleB) || !isFinite(childAngle)) return;
 
@@ -247,7 +253,7 @@ function drawBezierConnection(r1, angleA, r2, angleB, rMid, childAngle, rChild, 
   const midX = (x1 + x2) / 2;
   const midY = (y1 + y2) / 2;
 
-  // Curva 1: pai1 → centro
+  // Curva: pai1 → centro
   const path1 = elNS('path', {
     d: `M${x1},${y1} Q${midX},${midY} ${cx},${cy}`,
     stroke: color || '#4b5563',
@@ -257,7 +263,7 @@ function drawBezierConnection(r1, angleA, r2, angleB, rMid, childAngle, rChild, 
   });
   svgLayer.appendChild(path1);
 
-  // Curva 2: centro → pai2
+  // Curva: centro → pai2
   const path2 = elNS('path', {
     d: `M${cx},${cy} Q${midX},${midY} ${x2},${y2}`,
     stroke: color || '#4b5563',
@@ -267,7 +273,7 @@ function drawBezierConnection(r1, angleA, r2, angleB, rMid, childAngle, rChild, 
   });
   svgLayer.appendChild(path2);
 
-  // Linha vertical: centro → filho
+  // Linha: centro → filho
   const path3 = elNS('path', {
     d: `M${cx},${cy} L${cx2},${cy2}`,
     stroke: color || '#4b5563',
@@ -279,8 +285,9 @@ function drawBezierConnection(r1, angleA, r2, angleB, rMid, childAngle, rChild, 
 }
 
 // ============================================================
-// NÓ (TIME) – COM SLOT FIXO
+// NÓ (TIME) – GEOMETRIA FIXA, ESTADO VARIÁVEL
 // ============================================================
+
 function drawNode(team, r, a, color, pending, matchId, isWinner) {
   if (!isFinite(a)) return;
 
@@ -289,7 +296,7 @@ function drawNode(team, r, a, color, pending, matchId, isWinner) {
 
   const g = elNS('g', { 'data-match-id': matchId || '' });
 
-  // Círculo do nó (destaque se for vencedor)
+  // Círculo (tamanho varia se é vencedor)
   const radius = isWinner ? 18 : 14;
   const strokeWidth = isWinner ? 3 : 1.5;
 
@@ -302,7 +309,7 @@ function drawNode(team, r, a, color, pending, matchId, isWinner) {
     'stroke-width': strokeWidth,
   }));
 
-  // Texto (código do time)
+  // Texto
   const t = elNS('text', {
     x,
     y: y + 4,
@@ -314,7 +321,7 @@ function drawNode(team, r, a, color, pending, matchId, isWinner) {
   t.textContent = team?.code || 'TBD';
   g.appendChild(t);
 
-  // Eventos (hover)
+  // Eventos
   g.onmouseenter = (e) => {
     const rect = svgLayer.getBoundingClientRect();
     state.hover = {
@@ -334,8 +341,9 @@ function drawNode(team, r, a, color, pending, matchId, isWinner) {
 }
 
 // ============================================================
-// FUNÇÕES AUXILIARES (polar, clear, etc.)
+// FUNÇÕES AUXILIARES
 // ============================================================
+
 function polar(r, a) {
   return [CX + r * Math.sin(a), CY - r * Math.cos(a)];
 }
@@ -353,6 +361,7 @@ function clearSVG() {
 // ============================================================
 // FUNDO E ANÉIS
 // ============================================================
+
 function drawBackground() {
   const defs = elNS('defs', { id: 'defs' });
   const grad = elNS('radialGradient', { id: 'bgGlow', cx: '50%', cy: '50%', r: '55%' });
@@ -371,6 +380,7 @@ function drawBackground() {
 // ============================================================
 // TAÇA CENTRAL
 // ============================================================
+
 function drawTrophy() {
   const g = elNS('g');
   g.appendChild(elNS('circle', { cx: CX, cy: CY, r: 56, fill: '#0b0b0c', stroke: '#3a2c0c', 'stroke-width': 2 }));
@@ -383,6 +393,7 @@ function drawTrophy() {
 // ============================================================
 // UI (TOOLTIP + PANEL)
 // ============================================================
+
 function renderUI() {
   if (!tooltipEl || !panelEl) return;
 
@@ -394,7 +405,6 @@ function renderUI() {
     return;
   }
 
-  // Encontrar o match pelo fixtureId
   let match = null;
   for (const round of state.rounds) {
     const found = round.matches?.find((m) => m.fixtureId === hover.matchId);
@@ -421,7 +431,6 @@ function renderUI() {
     : null;
   const winnerName = winner?.name || '';
 
-  // ===== TOOLTIP =====
   tooltipEl.innerHTML = `
     <div><strong>${home}</strong> vs <strong>${away}</strong></div>
     <div class="score">${score}</div>
@@ -433,7 +442,6 @@ function renderUI() {
   tooltipEl.style.transform = `translate3d(${hover.x + 16}px, ${hover.y + 16}px, 0)`;
   tooltipEl.classList.add('visible');
 
-  // ===== PANEL =====
   panelEl.innerHTML = `
     <div class="match-title">
       <span>${home}</span>
@@ -453,8 +461,9 @@ function renderUI() {
 }
 
 // ============================================================
-// LOAD (COM ANTI-RACE)
+// LOAD (ANTI-RACE)
 // ============================================================
+
 let requestId = 0;
 
 async function load() {
@@ -493,6 +502,7 @@ async function load() {
 // ============================================================
 // INICIALIZAÇÃO
 // ============================================================
+
 if (refreshBtn) {
   refreshBtn.addEventListener('click', () => {
     if (!state.loading) load();
@@ -502,5 +512,5 @@ if (refreshBtn) {
 load();
 setInterval(load, 90000);
 
-console.log('🏆 Bracket circular com layout fixo iniciado.');
-console.log(`📊 Slots: ${positions.reduce((acc, l) => acc + l.length, 0)} nós fixos`);
+console.log('🏆 Bracket circular com geometria fixa iniciado.');
+console.log('📊 Layout determinístico: posições nunca mudam.');
