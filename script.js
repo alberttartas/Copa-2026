@@ -1,5 +1,5 @@
 // ============================================================
-// BRACKET CIRCULAR – COPA DO MUNDO 2026 (VERSÃO FINAL TRAVADA)
+// BRACKET CIRCULAR – COPA DO MUNDO 2026 (VERSÃO COM TACA.GIF)
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -105,40 +105,56 @@ function buildFixedLayout() {
 }
 
 // ============================================================
-// CONVERSOR GEOMÉTRICO RETIFICADO (POSIÇÃO URL ATUAL)
+// CONVERSOR GEOMÉTRICO RETIFICADO POR CÓDIGO DE PAÍS
 // ============================================================
 function mapApiToSlots() {
   const layout = buildFixedLayout();
   const round0Matches = state.rounds[0]?.matches || [];
 
-  // Alinhamento dos confrontos da API com a rotação visual desejada
-  const GEOMETRIC_TO_API_MAP = [
-    // === METADE ESQUERDA ===
-    0,  0,   // Alemanha vs Paraguai
-    1,  1,   // França vs (...)
-    2,  2,   // Noruega (fase inicial) vs (...)
-    3,  3,   // Marrocos vs (...)
-    4,  4,   // Portugal vs Croácia
-    5,  5,   // Espanha vs Áustria
-    6,  6,   // EUA vs (...)
-    7,  7,   // Bélgica vs Bósnia
+  const orderedMatches = new Array(16);
 
-    // === METADE DIREITA ===
-    8,  8,   // Brasil vs Japão (Fixado no topo direito)
-    9,  9,   // Adversário direto das Oitavas do Brasil
-    10, 10,  // México vs Equador
-    11, 11,  // Inglaterra vs (...)
-    12, 12,  // Argentina vs Cabo Verde
-    13, 13,  // Austrália vs Egito
-    14, 14,  // Suíça vs Argélia
-    15, 15   // Gana vs Colômbia
-  ];
+  round0Matches.forEach(match => {
+    const home = match.home?.code?.toUpperCase();
+    const away = match.away?.code?.toUpperCase();
 
-  // 1. Preenche o Anel de Entrada (32 avos)
+    // --- METADE ESQUERDA ---
+    if (home === 'GER' || away === 'GER') orderedMatches[0] = match;
+    else if (home === 'FRA' || away === 'FRA') orderedMatches[1] = match;
+    else if ((home === 'NOR' || away === 'NOR') && (home !== 'BRA' && away !== 'BRA')) {
+      orderedMatches[2] = match; 
+    }
+    else if (home === 'MAR' || away === 'MAR') orderedMatches[3] = match;
+    else if (home === 'POR' || away === 'POR') orderedMatches[4] = match;
+    else if (home === 'ESP' || away === 'ESP') orderedMatches[5] = match;
+    else if (home === 'USA' || away === 'USA') orderedMatches[6] = match;
+    else if (home === 'BEL' || away === 'BEL') orderedMatches[7] = match;
+
+    // --- METADE DIREITA ---
+    else if (home === 'BRA' || away === 'BRA') orderedMatches[8] = match; // Brasil no topo direito!
+    else if (home === 'MEX' || away === 'MEX') orderedMatches[10] = match;
+    else if (home === 'ENG' || away === 'ENG') orderedMatches[11] = match;
+    else if (home === 'ARG' || away === 'ARG') orderedMatches[12] = match;
+    else if (home === 'AUS' || away === 'AUS') orderedMatches[13] = match;
+    else if (home === 'SUI' || away === 'SUI') orderedMatches[14] = match;
+    else if (home === 'GHA' || away === 'GHA') orderedMatches[15] = match;
+  });
+
+  let fallbackIdx = 0;
+  for (let i = 0; i < 16; i++) {
+    if (!orderedMatches[i]) {
+      while (fallbackIdx < round0Matches.length && orderedMatches.includes(round0Matches[fallbackIdx])) {
+        fallbackIdx++;
+      }
+      if (fallbackIdx < round0Matches.length) {
+        orderedMatches[i] = round0Matches[fallbackIdx];
+      }
+    }
+  }
+
   for (let i = 0; i < layout[0].length; i++) {
     const slot = layout[0][i];
-    const matchIdx = GEOMETRIC_TO_API_MAP[i];
-    const match = round0Matches[matchIdx];
+    const matchIdx = Math.floor(i / 2);
+    const match = orderedMatches[matchIdx];
 
     if (match) {
       const actualTeam = (i % 2 === 0) ? match.home : match.away;
@@ -152,7 +168,6 @@ function mapApiToSlots() {
     }
   }
 
-  // 2. Fluxo Hierárquico de Subida (Preenche Oitavas, Quartas e Semis)
   for (let r = 1; r < layout.length; r++) {
     const currentLayer = layout[r];
     const prevLayer = layout[r - 1];
@@ -186,7 +201,6 @@ function mapApiToSlots() {
           if (pai1.team && pai1.team.id === winner.id) { pai1.isWinner = true; pai2.isEliminated = true; }
           if (pai2.team && pai2.team.id === winner.id) { pai2.isWinner = true; pai1.isEliminated = true; }
         } else {
-          // Mantém as bandeiras projetadas na tela se o time passou da fase anterior
           if (match.home && (pai1.team?.id === match.home.id || pai2.team?.id === match.home.id)) {
              slotFilho.team = match.home;
           } else if (match.away && (pai1.team?.id === match.away.id || pai2.team?.id === match.away.id)) {
@@ -384,12 +398,26 @@ function drawBackground() {
   });
 }
 
+// ============================================================
+// INJEÇÃO DA TAÇA EM GIF (SUBSTITUINDO O TEXTO ANTERIOR)
+// ============================================================
 function drawTrophy() {
   const g = elNS('g');
+  
+  // Mantém o círculo de fundo escuro com borda dourada estilizada do pôster
   g.appendChild(elNS('circle', { cx: CX, cy: CY, r: 52, fill: '#010102', stroke: '#18140b', 'stroke-width': 1.5 }));
-  const t = elNS('text', { x: CX, y: CY + 12, 'text-anchor': 'middle', 'font-size': 42, fill: '#cc9a18' });
-  t.textContent = '🏆';
-  g.appendChild(t);
+  
+  // Renderiza o taca.gif centralizado na raiz do projeto
+  const trophySize = 74; 
+  g.appendChild(elNS('image', {
+    x: CX - trophySize / 2,
+    y: CY - trophySize / 2,
+    width: trophySize,
+    height: trophySize,
+    href: 'taca.gif',
+    preserveAspectRatio: 'xMidYMid meet'
+  }));
+
   svgLayer.appendChild(g);
 }
 
