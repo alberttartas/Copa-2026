@@ -472,15 +472,14 @@ function renderTooltipOnly() {
   tooltipEl.classList.add('visible');
 }
 
-// LÓGICA DE CLIQUE: Renderiza as informações avançadas solicitadas no painel lateral fixo
+// LÓGICA DE CLIQUE: Renderiza as informações avançadas solicitadas no painel lateral/central
 function renderInteractivePanel() {
   if (!panelEl || !state.selectedMatchId) return;
 
   let match = null;
-  let currentRoundIdx = 0;
-  for (let i = 0; i < state.rounds.length; i++) {
-    const found = state.rounds[i].matches?.find((m) => m.fixtureId === state.selectedMatchId);
-    if (found) { match = found; currentRoundIdx = i; break; }
+  for (const round of state.rounds) {
+    const found = round.matches?.find((m) => m.fixtureId === state.selectedMatchId);
+    if (found) { match = found; break; }
   }
 
   if (!match) return;
@@ -491,68 +490,95 @@ function renderInteractivePanel() {
   const awayCode = match.away?.code?.toUpperCase();
   const stage = match.stage || 'Copa do Mundo';
 
+  // Coleta os artilheiros vindos diretamente da API atualizada
+  const homeScorer = match.home?.topScorer;
+  const awayScorer = match.away?.topScorer;
+
   // Formatação de data e hora do jogo
   let matchTimeHtml = '';
   if (match.date) {
     const dateObj = new Date(match.date);
     const dateStr = dateObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
     const timeStr = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    matchTimeHtml = `<div class="match-time-badge" style="color: #a4a4a8; font-size: 12px; margin-top: 4px;">📅 ${dateStr} às ${timeStr}</div>`;
+    matchTimeHtml = `<div class="match-time-badge" style="color: #cc9a18; font-size: 13px; font-weight: bold; margin-top: 4px;">📅 ${dateStr} às ${timeStr}</div>`;
   }
 
+  // Cabeçalho e Identificação do Confronto (Sempre exibe os selos das federações se as seleções existirem)
   let contentHtml = `
-    <div style="position: relative; padding: 12px;">
-      <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #cc9a18; font-weight: bold; margin-bottom: 8px;">🏆 ${stage}</div>
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <!-- Mandante -->
+    <div style="position: relative; padding: 12px; font-family: sans-serif;">
+      <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #cc9a18; font-weight: bold; margin-bottom: 12px; text-align: center;">🏆 ${stage}</div>
+      
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
         <div style="text-align: center; flex: 1;">
-          ${homeCode ? `<img src="assets/img/federations/${homeCode}.svg" width="36" height="36" onerror="this.style.display='none'" style="margin-bottom:4px;" />` : ''}
-          <div style="font-weight: bold; font-size: 14px; color: #fff;">${homeName}</div>
+          ${homeCode && match.home?.name !== 'TBD' 
+            ? `<img src="assets/img/federations/${homeCode}.svg" width="42" height="42" onerror="this.style.opacity='0.3'" style="margin-bottom:6px; display:block; margin-left:auto; margin-right:auto;" />` 
+            : `<div style="font-size:24px; margin-bottom:6px;">❓</div>`
+          }
+          <div style="font-weight: bold; font-size: 13px; color: #fff; line-height: 1.2;">${homeName}</div>
         </div>
         
-        <!-- Placar Central / VS -->
-        <div style="padding: 0 10px; text-align: center;">
+        <div style="padding: 0 10px; text-align: center; min-width: 70px;">
           ${match.status === 'FINISHED' 
-            ? `<div style="font-size: 22px; font-weight: 900; color: #cc9a18; letter-spacing: 2px;">${match.score?.home ?? 0}-${match.score?.away ?? 0}</div>`
-            : `<div style="font-size: 14px; font-weight: bold; background: #1a1a1e; padding: 4px 10px; border-radius: 4px; color: #71717a;">VS</div>`
+            ? `<div style="font-size: 24px; font-weight: 900; color: #cc9a18; letter-spacing: 1px;">${match.score?.home ?? 0}-${match.score?.away ?? 0}</div>
+               <div style="font-size: 9px; color: #4e4e54; font-weight: bold; margin-top: 2px;">FIM</div>`
+            : `<div style="font-size: 13px; font-weight: bold; background: #1a1a1e; padding: 6px 12px; border-radius: 4px; color: #a1a1aa; border: 1px solid #2d2d34;">VS</div>`
           }
         </div>
 
-        <!-- Visitante -->
         <div style="text-align: center; flex: 1;">
-          ${awayCode ? `<img src="assets/img/federations/${awayCode}.svg" width="36" height="36" onerror="this.style.display='none'" style="margin-bottom:4px;" />` : ''}
-          <div style="font-weight: bold; font-size: 14px; color: #fff;">${awayName}</div>
+          ${awayCode && match.away?.name !== 'TBD' 
+            ? `<img src="assets/img/federations/${awayCode}.svg" width="42" height="42" onerror="this.style.opacity='0.3'" style="margin-bottom:6px; display:block; margin-left:auto; margin-right:auto;" />` 
+            : `<div style="font-size:24px; margin-bottom:6px;">❓</div>`
+          }
+          <div style="font-weight: bold; font-size: 13px; color: #fff; line-height: 1.2;">${awayName}</div>
         </div>
       </div>
-      <div style="text-align: center; margin-bottom: 15px;">${matchTimeHtml}</div>
   `;
 
-  // SE O JOGO JÁ ACONTECEU: Mostrar dados da partida e principais artilheiros das seleções envolvidas
+  // CASO 1: A PARTIDA JÁ ACONTECEU (FINISHED)
   if (match.status === 'FINISHED') {
-    contentHtml += `<div style="border-top: 1px solid #1f1f23; padding-top: 10px;">
-      <div style="font-size: 12px; font-weight: bold; color: #e4e4e7; margin-bottom: 8px; text-align: center;">🎯 Artilheiros das Seleções</div>
-      <div style="display: flex; gap: 8px; justify-content: space-around;">`;
+    contentHtml += `
+      <div style="border-top: 1px solid #1f1f23; padding-top: 12px; text-align: center;">
+        <div style="font-size: 11px; color: #71717a; margin-bottom: 10px;">Partida realizada em ${match.dateStr || ''}</div>
+        <div style="font-size: 12px; font-weight: bold; color: #e4e4e7; margin-bottom: 8px;">🎯 Artilheiros Principais</div>
+        <div style="display: flex; gap: 8px; justify-content: space-around;">
+    `;
 
-    [homeCode, awayCode].forEach(code => {
-      if (code && SCORERS_DB[code]) {
-        const scorer = SCORERS_DB[code];
+    // Renderiza o card do artilheiro para os times que possuem dados na API
+    [
+      { code: homeCode, data: homeScorer, teamName: homeName }, 
+      { code: awayCode, data: awayScorer, teamName: awayName }
+    ].forEach(sc => {
+      if (sc.code && sc.code !== 'TBD') {
+        // Se a API retornar um artilheiro usa ele, caso contrário mostra um aviso padrão
+        const name = sc.data ? sc.data.name : 'Sem gols';
+        const goals = sc.data ? `${sc.data.goals} ⚽` : '0';
+        
         contentHtml += `
-          <div style="text-align: center; background: #0c0c0e; border: 1px solid #1a1a1e; padding: 6px; border-radius: 6px; width: 45%;">
-            <img src="assets/img/art/${code}.png" width="48" height="48" style="border-radius: 50%; object-fit: cover; border: 1px solid #cc9a18; background:#141416;" onerror="this.src='https://flagcdn.com/${code.toLowerCase().substring(0,2)}.svg'; this.style.borderRadius='4px';" />
-            <div style="font-size: 11px; font-weight: bold; color: #fff; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${scorer.name}</div>
-            <div style="font-size: 10px; color: #cc9a18;">⚽ ${scorer.goals} Gols</div>
+          <div style="text-align: center; background: #09090b; border: 1px solid #1c1c1f; padding: 8px 6px; border-radius: 6px; width: 46%;">
+            <div style="position: relative; width: 44px; height: 44px; margin: 0 auto 6px;">
+              <img src="assets/img/art/${sc.code}.png" width="44" height="44" style="border-radius: 50%; object-fit: cover; border: 1px solid #cc9a18; background:#141416;" 
+                onerror="this.src='https://flagcdn.com/${sc.code.toLowerCase().substring(0,2)}.svg'; this.style.borderRadius='4px';" />
+            </div>
+            <div style="font-size: 11px; font-weight: bold; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${name}">${name}</div>
+            <div style="font-size: 10px; color: #cc9a18; font-weight: bold; margin-top: 2px;">${goals}</div>
           </div>`;
       }
     });
 
     contentHtml += `</div></div>`;
   } 
-  // SE O JOGO NÃO ACONTECEU AINDA: Mostrar informações das seleções e contagem regressiva/chamada para a partida
+  // CASO 2: A PARTIDA AINDA NÃO ACONTECEU
   else {
     contentHtml += `
-      <div style="border-top: 1px solid #1f1f23; padding-top: 12px; text-align: center; background: #0a0a0c; border-radius: 6px; padding: 10px;">
-        <div style="font-size: 11px; color: #a1a1aa; line-height: 1.4;">
-          Confronto decisivo aguardando o apito inicial. O vencedor avança direto para a próxima fase do chaveamento no anel interno!
+      <div style="border-top: 1px solid #1f1f23; padding-top: 14px; text-align: center;">
+        <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #71717a; font-weight: bold; margin-bottom: 4px;">Próxima Partida</div>
+        ${matchTimeHtml}
+        <div style="margin-top: 12px; background: #09090b; border: 1px solid #1c1c1f; border-radius: 6px; padding: 10px; font-size: 11px; color: #a1a1aa; line-height: 1.4;">
+          ${match.home?.id && match.away?.id 
+            ? `Confronto definido! As duas seleções entram em campo valendo a classificação para a próxima etapa do torneio circular.`
+            : `Aguardando a definição de todas as equipes das fases anteriores para consolidar o chaveamento oficial.`
+          }
         </div>
       </div>
     `;
