@@ -1,17 +1,17 @@
 // ============================================================
-// BRACKET CIRCULAR – COPA DO MUNDO 2026 (PREENCHIMENTO TOTAL INTERNO)
+// BRACKET CIRCULAR – COPA DO MUNDO 2026 (VERSÃO FINAL TRAVADA)
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
 
-// ---------- DOM REFS ----------
+// ---------- REFERÊNCIAS DO DOM ----------
 const svgLayer = document.getElementById('bracket-layer');
 const tooltipEl = document.getElementById('tooltip');
 const panelEl = document.getElementById('panel');
 const statusText = document.getElementById('statusText');
 const refreshBtn = document.getElementById('refreshBtn');
 
-// ---------- STATE ----------
+// ---------- ESTADO GLOBAL ----------
 const state = {
   rounds: [],
   leaves: [],
@@ -27,14 +27,14 @@ const LEVEL_R = [420, 360, 300, 240, 180, 120];
 const COLOR_INACTIVE_LINE = '#26262b';
 const COLOR_INACTIVE_NODE = '#111113';
 
-// Cores ativas oficiais para destaque nos caminhos de vitória
+// Cores ativas para destaque dos caminhos de vitória no pôster
 const TEAM_COLORS = {
   BRA: '#cc9a18', FRA: '#1e4391', CAN: '#b51219', MAR: '#0d6130',
   NOR: '#a61423', MEX: '#0b4728', ENG: '#d1d1d1', ARG: '#5b96cb',
   GER: '#d1d1d1', POR: '#991116', ESP: '#bd1117', USA: '#042247'
 };
 
-// Mapeamento fixo de índices (Alinhado perfeitamente com a API e o Poster)
+// Mapeamento de ângulos fixo (Metade Esquerda e Metade Direita)
 const INDEX_GEOMETRY_MAP = {
   0:  { side: 'left',  pos: 0  }, 1:  { side: 'left',  pos: 1  },
   2:  { side: 'left',  pos: 2  }, 3:  { side: 'left',  pos: 3  },
@@ -105,16 +105,39 @@ function buildFixedLayout() {
 }
 
 // ============================================================
-// MAPEAMENTO RIGOROSO DA SUBIDA – HERANÇA DIRETA DE SELEÇÕES
+// CONVERSOR GEOMÉTRICO RETIFICADO (POSIÇÃO URL ATUAL)
 // ============================================================
 function mapApiToSlots() {
   const layout = buildFixedLayout();
-  
-  // 1. Preenche a primeira rodada (Anel Externo)
   const round0Matches = state.rounds[0]?.matches || [];
+
+  // Alinhamento dos confrontos da API com a rotação visual desejada
+  const GEOMETRIC_TO_API_MAP = [
+    // === METADE ESQUERDA ===
+    0,  0,   // Alemanha vs Paraguai
+    1,  1,   // França vs (...)
+    2,  2,   // Noruega (fase inicial) vs (...)
+    3,  3,   // Marrocos vs (...)
+    4,  4,   // Portugal vs Croácia
+    5,  5,   // Espanha vs Áustria
+    6,  6,   // EUA vs (...)
+    7,  7,   // Bélgica vs Bósnia
+
+    // === METADE DIREITA ===
+    8,  8,   // Brasil vs Japão (Fixado no topo direito)
+    9,  9,   // Adversário direto das Oitavas do Brasil
+    10, 10,  // México vs Equador
+    11, 11,  // Inglaterra vs (...)
+    12, 12,  // Argentina vs Cabo Verde
+    13, 13,  // Austrália vs Egito
+    14, 14,  // Suíça vs Argélia
+    15, 15   // Gana vs Colômbia
+  ];
+
+  // 1. Preenche o Anel de Entrada (32 avos)
   for (let i = 0; i < layout[0].length; i++) {
     const slot = layout[0][i];
-    const matchIdx = Math.floor(i / 2);
+    const matchIdx = GEOMETRIC_TO_API_MAP[i];
     const match = round0Matches[matchIdx];
 
     if (match) {
@@ -129,7 +152,7 @@ function mapApiToSlots() {
     }
   }
 
-  // 2. Transmissão hierárquica contínua para os círculos internos
+  // 2. Fluxo Hierárquico de Subida (Preenche Oitavas, Quartas e Semis)
   for (let r = 1; r < layout.length; r++) {
     const currentLayer = layout[r];
     const prevLayer = layout[r - 1];
@@ -140,7 +163,6 @@ function mapApiToSlots() {
       const pai1 = prevLayer[i * 2];
       const pai2 = prevLayer[i * 2 + 1];
 
-      // Busca a partida baseada estritamente nos IDs que vieram dos nós pais
       const match = currentRoundMatches.find(m => 
         (pai1.team?.id && (m.home?.id === pai1.team.id || m.away?.id === pai1.team.id)) ||
         (pai2.team?.id && (m.home?.id === pai2.team.id || m.away?.id === pai2.team.id))
@@ -148,8 +170,8 @@ function mapApiToSlots() {
 
       if (match) {
         slotFilho.matchId = match.fixtureId;
-        
         let winner = null;
+
         if (match.winnerId != null) {
           winner = (match.home?.id === match.winnerId) ? match.home : match.away;
         } else if (match.status === 'FINISHED') {
@@ -164,15 +186,12 @@ function mapApiToSlots() {
           if (pai1.team && pai1.team.id === winner.id) { pai1.isWinner = true; pai2.isEliminated = true; }
           if (pai2.team && pai2.team.id === winner.id) { pai2.isWinner = true; pai1.isEliminated = true; }
         } else {
-          // SE O JOGO NÃO TERMINOU: O nó assume o time que já está classificado vindo de baixo
-          // Isso garante a bandeira preenchida nas Oitavas/Quartas sem esperar o fim da rodada atual
+          // Mantém as bandeiras projetadas na tela se o time passou da fase anterior
           if (match.home && (pai1.team?.id === match.home.id || pai2.team?.id === match.home.id)) {
              slotFilho.team = match.home;
           } else if (match.away && (pai1.team?.id === match.away.id || pai2.team?.id === match.away.id)) {
              slotFilho.team = match.away;
           }
-
-          // Ativa os caminhos visuais das linhas para os nós que subiram
           if (pai1.team && !pai1.isEliminated) pai1.isWinner = true;
           if (pai2.team && !pai2.isEliminated) pai2.isWinner = true;
         }
@@ -181,7 +200,6 @@ function mapApiToSlots() {
           slotFilho.isEliminated = true;
         }
       } else {
-        // Fallback estrutural: Se a API ainda não processou o nó do round superior, puxa o vencedor persistente
         if (pai1.isWinner && !pai1.isEliminated) slotFilho.team = pai1.team;
         else if (pai2.isWinner && !pai2.isEliminated) slotFilho.team = pai2.team;
       }
@@ -192,7 +210,7 @@ function mapApiToSlots() {
 }
 
 // ============================================================
-// RENDERIZAÇÃO DAS CONEXÕES E CURVAS DE FLUXO
+// RENDERIZAÇÃO GRÁFICA
 // ============================================================
 function render() {
   if (!svgLayer) return;
@@ -259,9 +277,6 @@ function drawSeparatedBezierConnection(r1, angleA, col1, w1, r2, angleB, col2, w
   svgLayer.appendChild(elNS('path', { d: `M${cx},${cy} L${cx2},${cy2}`, stroke: colJ, fill: 'none', 'stroke-width': wJ }));
 }
 
-// ============================================================
-// DESENHO DOS CIRULOS (NÓS) E PREENCHIMENTO DE BANDEIRAS
-// ============================================================
 function drawNode(slot) {
   const { team, radius, angle, round, matchId, isWinner, isEliminated } = slot;
   if (!isFinite(angle)) return;
@@ -339,7 +354,7 @@ function drawNode(slot) {
   svgLayer.appendChild(g);
 }
 
-// ---------- AUXILIARES GEOMÉTRICOS ----------
+// ---------- MÉTODOS AUXILIARES ----------
 function polar(r, a) {
   return [CX + r * Math.sin(a), CY - r * Math.cos(a)];
 }
@@ -403,7 +418,7 @@ function renderUI() {
   const home = match.home?.name || 'TBD';
   const away = match.away?.name || 'TBD';
   const score = match.status === 'FINISHED' ? `${match.score?.home ?? 0} – ${match.score?.away ?? 0}` : 'VS';
-  const stage = match.stage || 'Fase Eliminatória';
+  const stage = match.stage || 'Eliminatória';
 
   tooltipEl.innerHTML = `<div><strong>${home}</strong> vs <strong>${away}</strong></div><div class="score">${score}</div>`;
   tooltipEl.style.transform = `translate3d(${hover.x + 16}px, ${hover.y + 16}px, 0)`;
@@ -413,6 +428,7 @@ function renderUI() {
   panelEl.classList.add('visible');
 }
 
+// ---------- CONTROLE DE DADOS DA API ----------
 async function load() {
   state.loading = true;
   if (statusText) statusText.textContent = 'Atualizando...';
@@ -424,7 +440,7 @@ async function load() {
     state.updatedAt = data.updatedAt || null;
     render();
   } catch (e) {
-    if (statusText) statusText.textContent = '❌ Erro ao carregar';
+    if (statusText) statusText.textContent = '❌ Erro na requisição';
   } finally {
     state.loading = false;
   }
