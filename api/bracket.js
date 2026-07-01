@@ -1,71 +1,27 @@
 // api/bracket.js
 //
 // Endpoint principal que gera a chave do mata-mata da Copa do Mundo 2026
-// com suporte a múltiplos formatos de nomenclatura de fases
-// e geração de links (nextMatchId + nextSlot) para progressão correta
+// Integrado com busca automática de artilheiros oficiais da competição
 
 const COMPETITION_CODE = "WC";
 const BASE_URL = "https://api.football-data.org/v4";
 
-// Mapeamento completo de fases (mais abrangente)
 const ROUND_MATCHERS = [
-  { 
-    key: "r32", 
-    label: "Fase de 32 (Oitavas-de-32)", 
-    test: (r) => /32|ROUND_OF_32|Round of 32|Last 32/i.test(r),
-    priority: 1
-  },
-  { 
-    key: "r16", 
-    label: "Oitavas de Final", 
-    test: (r) => /16|ROUND_OF_16|Round of 16|Last 16|Knockout|Eighth|EIGHTH/i.test(r),
-    priority: 2
-  },
-  { 
-    key: "qf", 
-    label: "Quartas de Final", 
-    test: (r) => /quarter|QUARTER_FINALS|Quarter-Final|Quarterfinal|QUARTER/i.test(r),
-    priority: 3
-  },
-  { 
-    key: "sf", 
-    label: "Semifinal", 
-    test: (r) => /semi|SEMI_FINALS|Semi-Final|Semifinal|SEMI/i.test(r),
-    priority: 4
-  },
-  { 
-    key: "final", 
-    label: "Final", 
-    test: (r) => /^final$|FINAL|Championship|CHAMPIONSHIP|Final Round/i.test(r.trim()),
-    priority: 5
-  },
-  { 
-    key: "third", 
-    label: "Disputa do 3º Lugar", 
-    test: (r) => /third|3rd|3º|Third place|THIRD_PLACE/i.test(r),
-    priority: 6
-  }
+  { key: "r32", label: "Fase de 32 (Oitavas-de-32)", test: (r) => /32|ROUND_OF_32|Round of 32|Last 32/i.test(r), priority: 1 },
+  { key: "r16", label: "Oitavas de Final", test: (r) => /16|ROUND_OF_16|Round of 16|Last 16|Knockout|Eighth|EIGHTH/i.test(r), priority: 2 },
+  { key: "qf", label: "Quartas de Final", test: (r) => /quarter|QUARTER_FINALS|Quarter-Final|Quarterfinal|QUARTER/i.test(r), priority: 3 },
+  { key: "sf", label: "Semifinal", test: (r) => /semi|SEMI_FINALS|Semi-Final|Semifinal|SEMI/i.test(r), priority: 4 },
+  { key: "final", label: "Final", test: (r) => /^final$|FINAL|Championship|CHAMPIONSHIP|Final Round/i.test(r.trim()), priority: 5 },
+  { key: "third", label: "Disputa do 3º Lugar", test: (r) => /third|3rd|3º|Third place|THIRD_PLACE/i.test(r), priority: 6 }
 ];
 
-// Mapeamento direto para nomes comuns da API
 const STAGE_MAPPING = {
-  'GROUP_STAGE': 'group',
-  'PRELIMINARY': 'preliminary',
-  'QUALIFYING': 'qualifying',
-  'PLAYOFFS': 'playoffs',
-  'ROUND_OF_32': 'r32',
-  'ROUND_OF_16': 'r16',
-  'QUARTER_FINALS': 'qf',
-  'QUARTERFINAL': 'qf',
-  'SEMI_FINALS': 'sf',
-  'SEMIFINAL': 'sf',
-  'FINAL': 'final',
-  'THIRD_PLACE': 'third',
-  'THIRD_PLACE_MATCH': 'third',
-  '3RD_PLACE': 'third'
+  'GROUP_STAGE': 'group', 'PRELIMINARY': 'preliminary', 'QUALIFYING': 'qualifying', 'PLAYOFFS': 'playoffs',
+  'ROUND_OF_32': 'r32', 'ROUND_OF_16': 'r16', 'QUARTER_FINALS': 'qf', 'QUARTERFINAL': 'qf',
+  'SEMI_FINALS': 'sf', 'SEMIFINAL': 'sf', 'FINAL': 'final', 'THIRD_PLACE': 'third',
+  'THIRD_PLACE_MATCH': 'third', '3RD_PLACE': 'third'
 };
 
-// Status dos jogos com cores e labels
 const STATUS_INFO = {
   'SCHEDULED': { label: 'EM BREVE', class: 'upcoming', icon: '🟡' },
   'TIMED': { label: 'EM BREVE', class: 'upcoming', icon: '🟡' },
@@ -96,11 +52,11 @@ async function footballData(path) {
     throw new Error(`football-data.org HTTP ${res.status}: ${json.message || JSON.stringify(json)}`);
   }
   
-  console.log(`[API] Success: ${json.count || json.matches?.length || 0} items`);
   return json;
 }
 
-function normalizeFixture(m) {
+// Injeta as propriedades de artilheiro vindas da busca paralela
+function normalizeFixture(m, topScorersMap = {}) {
   const home = m.homeTeam || { id: null, tla: null, name: 'TBD', crest: null };
   const away = m.awayTeam || { id: null, tla: null, name: 'TBD', crest: null };
   const winner = m.score?.winner;
@@ -115,11 +71,14 @@ function normalizeFixture(m) {
 
   const statusInfo = STATUS_INFO[m.status] || { label: m.status || 'DESCONHECIDO', class: 'upcoming', icon: '⚪' };
 
+  const homeCode = home.tla?.toUpperCase();
+  const awayCode = away.tla?.toUpperCase();
+
   return {
     fixtureId: m.id,
     date: m.utcDate,
-    dateStr: dateStr,
-    timeStr: timeStr,
+    dateStr,
+    timeStr,
     status: m.status,
     statusLabel: statusInfo.label,
     statusClass: statusInfo.class,
@@ -129,13 +88,15 @@ function normalizeFixture(m) {
       id: home.id, 
       code: home.tla, 
       name: home.name || 'TBD', 
-      logo: home.crest || null 
+      logo: home.crest || null,
+      topScorer: topScorersMap[homeCode] || null // Injetado dinamicamente
     },
     away: { 
       id: away.id, 
       code: away.tla, 
       name: away.name || 'TBD', 
-      logo: away.crest || null 
+      logo: away.crest || null,
+      topScorer: topScorersMap[awayCode] || null // Injetado dinamicamente
     },
     score: {
       home: m.score?.fullTime?.home ?? m.score?.halfTime?.home ?? null,
@@ -150,15 +111,11 @@ function normalizeFixture(m) {
     isFinished: m.status === 'FINISHED',
     isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(m.status),
     isUpcoming: ['SCHEDULED', 'TIMED'].includes(m.status),
-    // Campos que serão preenchidos pelo linkRounds
     nextMatchId: null,
     nextSlot: null,
   };
 }
 
-// ============================================================
-// FUNÇÃO QUE CRIA OS LINKS ENTRE ROUNDS (GRAFO DO TORNEIO)
-// ============================================================
 function linkRounds(rounds) {
   for (let i = 0; i < rounds.length - 1; i++) {
     const current = rounds[i];
@@ -171,7 +128,6 @@ function linkRounds(rounds) {
         match.nextMatchId = nextMatch.fixtureId || nextMatch.id || `${next.key}-${nextMatchIndex}`;
         match.nextSlot = (idx % 2 === 0) ? 'home' : 'away';
       } else {
-        // Se não houver próximo match (caso de fase ímpar), deixar nulo
         match.nextMatchId = null;
         match.nextSlot = null;
       }
@@ -180,7 +136,6 @@ function linkRounds(rounds) {
 }
 
 module.exports = async (req, res) => {
-  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -191,39 +146,38 @@ module.exports = async (req, res) => {
   }
 
   if (!process.env.FOOTBALL_DATA_TOKEN) {
-    res.status(500).json({ 
-      error: "FOOTBALL_DATA_TOKEN não configurada nas env vars do projeto.",
-      tip: "Adicione FOOTBALL_DATA_TOKEN no Vercel (Project Settings > Environment Variables)"
-    });
+    res.status(500).json({ error: "FOOTBALL_DATA_TOKEN não configurada nas env vars." });
     return;
   }
 
   try {
-    const data = await footballData(`/competitions/${COMPETITION_CODE}/matches`);
-    const matches = data.matches || [];
+    // Busca em paralelo: Partidas e Artilharia da competição
+    const [matchesData, scorersData] = await Promise.all([
+      footballData(`/competitions/${COMPETITION_CODE}/matches`),
+      footballData(`/competitions/${COMPETITION_CODE}/scorers?limit=50`).catch(() => ({ scorers: [] }))
+    ]);
 
-    console.log(`[API] Total matches: ${matches.length}`);
+    const matches = matchesData.matches || [];
+    const scorersList = scorersData.scorers || [];
 
-    if (matches.length === 0) {
-      return res.status(200).json({
-        league: "FIFA World Cup 2026",
-        updatedAt: new Date().toISOString(),
-        leaves: [],
-        rounds: [],
-        message: "Nenhuma partida encontrada para a Copa do Mundo 2026.",
-        stagesDebug: {}
-      });
-    }
+    // Mapeia o principal artilheiro de cada seleção (Key: TLA do país)
+    const topScorersMap = {};
+    scorersList.forEach(item => {
+      const teamCode = item.team?.tla?.toUpperCase();
+      if (teamCode && !topScorersMap[teamCode]) {
+        topScorersMap[teamCode] = {
+          name: item.player.name,
+          goals: item.goals
+        };
+      }
+    });
 
-    // --- 1. Coletar todas as fases disponíveis (debug) ---
     const stagesAvailable = {};
     for (const m of matches) {
       const stage = m.stage || 'UNKNOWN';
       stagesAvailable[stage] = (stagesAvailable[stage] || 0) + 1;
     }
-    console.log('[API] Stages available:', stagesAvailable);
 
-    // --- 2. Agrupar partidas por fase (byRound) ---
     const byRound = {};
     const unmatchedStages = [];
 
@@ -232,14 +186,12 @@ module.exports = async (req, res) => {
       let matchedKey = null;
       let matchedLabel = null;
 
-      // 2a. Mapeamento direto
       if (STAGE_MAPPING[stageName]) {
         matchedKey = STAGE_MAPPING[stageName];
         const matchDef = ROUND_MATCHERS.find(r => r.key === matchedKey);
         if (matchDef) matchedLabel = matchDef.label;
       }
 
-      // 2b. Tentar regex
       if (!matchedKey) {
         const matchDef = ROUND_MATCHERS.find((r) => r.test(stageName));
         if (matchDef) {
@@ -248,31 +200,19 @@ module.exports = async (req, res) => {
         }
       }
 
-      // 2c. Fallback: ignorar fases de grupos
       if (!matchedKey) {
-        const lower = stageName.toLowerCase();
-        if (lower.includes('group') || lower.includes('fase de grupos')) {
-          continue; // Ignorar fase de grupos
-        }
+        if (stageName.toLowerCase().includes('group')) continue;
         unmatchedStages.push(stageName);
         continue;
       }
 
       if (!byRound[matchedKey]) {
-        byRound[matchedKey] = {
-          key: matchedKey,
-          label: matchedLabel || stageName,
-          matches: []
-        };
+        byRound[matchedKey] = { key: matchedKey, label: matchedLabel || stageName, matches: [] };
       }
-      byRound[matchedKey].matches.push(normalizeFixture(m));
+      // Passa o mapa de artilheiros para a normalização
+      byRound[matchedKey].matches.push(normalizeFixture(m, topScorersMap));
     }
 
-    if (unmatchedStages.length > 0) {
-      console.warn('[API] Unmatched stages:', [...new Set(unmatchedStages)]);
-    }
-
-    // --- 3. Ordenar fases conforme ordem definida ---
     const order = ["r32", "r16", "qf", "sf", "final", "third"];
     const rounds = order
       .filter((key) => byRound[key])
@@ -282,49 +222,19 @@ module.exports = async (req, res) => {
         return round;
       });
 
-    // --- 4. Criar links entre rounds (NOVO) ---
     linkRounds(rounds);
 
-    // --- 5. Determinar "leaves" (times da primeira fase) ---
-    const leafRoundKey = rounds.find((r) => r.key === "r32") ? "r32" : 
-                         rounds.find((r) => r.key === "r16") ? "r16" : null;
+    const leafRoundKey = rounds.find((r) => r.key === "r32") ? "r32" : rounds.find((r) => r.key === "r16") ? "r16" : null;
     const leafRound = leafRoundKey ? rounds.find((r) => r.key === leafRoundKey) : null;
     const leaves = [];
 
     if (leafRound) {
       for (const m of leafRound.matches) {
-        if (m.home && m.home.name && m.home.name !== 'TBD') {
-          leaves.push(m.home);
-        }
-        if (m.away && m.away.name && m.away.name !== 'TBD') {
-          leaves.push(m.away);
-        }
+        if (m.home?.name && m.home.name !== 'TBD') leaves.push(m.home);
+        if (m.away?.name && m.away.name !== 'TBD') leaves.push(m.away);
       }
     }
 
-    // Fallback: se não encontrou folhas, usar times da primeira fase
-    if (leaves.length === 0 && rounds.length > 0) {
-      const firstRound = rounds[0];
-      const teamSet = new Set();
-      for (const m of firstRound.matches) {
-        if (m.home && m.home.name && m.home.name !== 'TBD') {
-          const key = m.home.id || m.home.name;
-          if (!teamSet.has(key)) {
-            teamSet.add(key);
-            leaves.push(m.home);
-          }
-        }
-        if (m.away && m.away.name && m.away.name !== 'TBD') {
-          const key = m.away.id || m.away.name;
-          if (!teamSet.has(key)) {
-            teamSet.add(key);
-            leaves.push(m.away);
-          }
-        }
-      }
-    }
-
-    // --- 6. Resposta final ---
     res.setHeader("Cache-Control", "s-maxage=180, stale-while-revalidate=300");
     res.status(200).json({
       success: true,
@@ -334,21 +244,11 @@ module.exports = async (req, res) => {
       leaves: leaves,
       rounds: rounds,
       stagesDebug: stagesAvailable,
-      unmatchedStages: [...new Set(unmatchedStages)],
-      debug: {
-        totalMatches: matches.length,
-        stagesFound: Object.keys(stagesAvailable).length,
-        roundsFound: rounds.length,
-        leavesCount: leaves.length,
-        timestamp: new Date().toISOString()
-      }
+      unmatchedStages: [...new Set(unmatchedStages)]
     });
 
   } catch (err) {
     console.error('[API] Error:', err);
-    res.status(502).json({ 
-      error: String(err.message || err),
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    });
+    res.status(502).json({ error: String(err.message || err) });
   }
 };
