@@ -1229,124 +1229,85 @@ function render(data) {
     const size = NODE_SIZE[sizeIdx];
 
     if (isFirstRound) {
-      // --------------------------------------------------
-      // PRIMEIRA FASE: criar um nó para cada time (home e away)
-      // --------------------------------------------------
-      const nodes = [];
+      // Primeira fase: criar 2 nós por match, ângulos uniformes (0 a 360)
       const totalMatches = matches.length;
+      const nodes = [];
+
       matches.forEach((match, idx) => {
-        const step = 360 / totalMatches;
-        const angle = idx * step;
+        // Cada match ocupa um setor de 360/totalMatches graus
+        const sectorAngle = 360 / totalMatches;
+        // Ângulo central do setor (distribuição uniforme)
+        const baseAngle = idx * sectorAngle;
+        // Cor do ramo baseada na posição (8 cores)
         const branchIdx = Math.floor(idx / (totalMatches / 8)) % 8;
 
-        // Time da casa
-        if (match.home && match.home.name && match.home.name !== 'TBD') {
-          const homeAngle = normalizeAngle(angle - step * 0.2);
-          const homeNode = {
-            team: {
-              ...match.home,
-              _matchData: {
-                opponent: match.away,
-                homeName: match.home.name,
-                awayName: match.away?.name || '—',
-                score: match.score ? `${match.score.home ?? '?'} × ${match.score.away ?? '?'}` : '—',
-                stage: round.label,
-                date: new Date(match.date).toLocaleDateString('pt-BR'),
-                time: new Date(match.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}),
-                status: match.status || 'SCHEDULED',
-                isUpcoming: ['SCHEDULED', 'TIMED'].includes(match.status),
-                isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
-                isFinished: match.status === 'FINISHED',
-                statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE'
-              }
-            },
-            angle: homeAngle,
-            branchIdx: branchIdx,
-            matchId: match.id,
-            isHome: true
-          };
-          nodes.push(homeNode);
-          teamNode(homeNode.team, r, homeAngle, BRANCH_COLORS[branchIdx], false, size, 0, false);
-        } else {
-          // Criar TBD para home se não existir
-          const homeAngle = normalizeAngle(angle - step * 0.2);
-          const tbdTeam = { name: 'TBD', logo: null, id: null, code: null, _matchData: {} };
-          nodes.push({ team: tbdTeam, angle: homeAngle, branchIdx: 0 });
-          teamNode(tbdTeam, r, homeAngle, GREY, true, size, 0, false);
+        // --- Time da casa ---
+        const homeAngle = normalizeAngle(baseAngle - sectorAngle * 0.2);
+        let homeTeam = match.home;
+        if (!homeTeam || homeTeam.name === 'TBD') {
+          homeTeam = { name: 'TBD', logo: null, id: null, code: null };
         }
+        homeTeam._matchData = {
+          opponent: match.away,
+          homeName: homeTeam.name,
+          awayName: match.away?.name || '—',
+          score: match.score ? `${match.score.home ?? '?'} × ${match.score.away ?? '?'}` : '—',
+          stage: round.label,
+          date: new Date(match.date).toLocaleDateString('pt-BR'),
+          time: new Date(match.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          status: match.status || 'SCHEDULED',
+          isUpcoming: ['SCHEDULED', 'TIMED'].includes(match.status),
+          isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
+          isFinished: match.status === 'FINISHED',
+          statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE'
+        };
+        const pendingHome = !homeTeam.id || homeTeam.name === 'TBD';
+        teamNode(homeTeam, r, homeAngle, pendingHome ? GREY : BRANCH_COLORS[branchIdx], pendingHome, size, 0, false);
+        nodes.push({ team: homeTeam, angle: homeAngle, branchIdx });
 
-        // Time visitante
-        if (match.away && match.away.name && match.away.name !== 'TBD') {
-          const awayAngle = normalizeAngle(angle + step * 0.2);
-          const awayNode = {
-            team: {
-              ...match.away,
-              _matchData: {
-                opponent: match.home,
-                homeName: match.home?.name || '—',
-                awayName: match.away.name,
-                score: match.score ? `${match.score.home ?? '?'} × ${match.score.away ?? '?'}` : '—',
-                stage: round.label,
-                date: new Date(match.date).toLocaleDateString('pt-BR'),
-                time: new Date(match.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}),
-                status: match.status || 'SCHEDULED',
-                isUpcoming: ['SCHEDULED', 'TIMED'].includes(match.status),
-                isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
-                isFinished: match.status === 'FINISHED',
-                statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE'
-              }
-            },
-            angle: awayAngle,
-            branchIdx: branchIdx,
-            matchId: match.id,
-            isHome: false
-          };
-          nodes.push(awayNode);
-          teamNode(awayNode.team, r, awayAngle, BRANCH_COLORS[branchIdx], false, size, 0, false);
-        } else {
-          const awayAngle = normalizeAngle(angle + step * 0.2);
-          const tbdTeam = { name: 'TBD', logo: null, id: null, code: null, _matchData: {} };
-          nodes.push({ team: tbdTeam, angle: awayAngle, branchIdx: 0 });
-          teamNode(tbdTeam, r, awayAngle, GREY, true, size, 0, false);
+        // --- Time visitante ---
+        const awayAngle = normalizeAngle(baseAngle + sectorAngle * 0.2);
+        let awayTeam = match.away;
+        if (!awayTeam || awayTeam.name === 'TBD') {
+          awayTeam = { name: 'TBD', logo: null, id: null, code: null };
         }
+        awayTeam._matchData = {
+          opponent: match.home,
+          homeName: match.home?.name || '—',
+          awayName: awayTeam.name,
+          score: match.score ? `${match.score.home ?? '?'} × ${match.score.away ?? '?'}` : '—',
+          stage: round.label,
+          date: new Date(match.date).toLocaleDateString('pt-BR'),
+          time: new Date(match.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          status: match.status || 'SCHEDULED',
+          isUpcoming: ['SCHEDULED', 'TIMED'].includes(match.status),
+          isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
+          isFinished: match.status === 'FINISHED',
+          statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE'
+        };
+        const pendingAway = !awayTeam.id || awayTeam.name === 'TBD';
+        teamNode(awayTeam, r, awayAngle, pendingAway ? GREY : BRANCH_COLORS[branchIdx], pendingAway, size, 0, false);
+        nodes.push({ team: awayTeam, angle: awayAngle, branchIdx });
       });
 
       previousNodes = nodes;
+      console.log(`📌 Fase ${ri} (${round.key}) criou ${nodes.length} nós com distribuição uniforme`);
 
     } else {
-      // --------------------------------------------------
-      // FASES SEGUINTES: conectar 2 pais → 1 filho (por posição)
-      // --------------------------------------------------
+      // Fases seguintes: matching por ID (já testado e funcionando)
       const currentNodes = [];
-      const prevCount = previousNodes.length;
 
-      matches.forEach((match, idx) => {
-        // Cada match da fase atual corresponde a dois nós consecutivos da fase anterior
-        const idx1 = idx * 2;
-        const idx2 = idx * 2 + 1;
+      matches.forEach((match) => {
+        const homeParent = previousNodes.find(n => n.team.id === match.home?.id);
+        const awayParent = previousNodes.find(n => n.team.id === match.away?.id);
 
-        // Obter os pais (ou criar TBDs se não existirem)
-        let parent1, parent2;
-        if (idx1 < prevCount) {
-          parent1 = previousNodes[idx1];
-        } else {
-          const angle = (prevCount > 0) ? previousNodes[prevCount - 1].angle : 0;
-          const tbdTeam = { name: 'TBD', logo: null, id: null, code: null, _matchData: {} };
-          parent1 = { team: tbdTeam, angle: normalizeAngle(angle + 10), branchIdx: 0 };
+        if (!homeParent || !awayParent) {
+          console.warn(`⚠️ Pais não encontrados para match ${match.id}`, match);
+          return;
         }
 
-        if (idx2 < prevCount) {
-          parent2 = previousNodes[idx2];
-        } else {
-          const angle = (prevCount > 0) ? previousNodes[prevCount - 1].angle : 0;
-          const tbdTeam = { name: 'TBD', logo: null, id: null, code: null, _matchData: {} };
-          parent2 = { team: tbdTeam, angle: normalizeAngle(angle - 10), branchIdx: 0 };
-        }
+        const childAngle = calculateMidAngle(homeParent.angle, awayParent.angle);
 
-        // Ângulo do filho = ponto médio dos pais
-        const childAngle = calculateMidAngle(parent1.angle, parent2.angle);
-
-        // Determinar vencedor (se houver)
         let winnerTeam = null;
         let decided = false;
         if (match.winnerId) {
@@ -1365,21 +1326,19 @@ function render(data) {
           }
         }
 
-        // Cor do ramo
         const branchIdx = decided ?
-          (winnerTeam?.id === match.home?.id ? parent1.branchIdx : parent2.branchIdx) :
-          parent1.branchIdx;
+          (winnerTeam?.id === match.home?.id ? homeParent.branchIdx : awayParent.branchIdx) :
+          homeParent.branchIdx;
         const color = decided ? BRANCH_COLORS[branchIdx] : GREY;
 
-        // Desenhar conector
         const rMid = (LEVEL_R[ri-1] + LEVEL_R[ri]) / 2;
         const glowLevel = Math.min(ri, GLOW_AMOUNT.length - 1);
         const lineWidth = Math.min(ri + 1, LINE_WIDTH.length - 1);
 
         drawConnector(
           LEVEL_R[ri-1],
-          parent1.angle,
-          parent2.angle,
+          homeParent.angle,
+          awayParent.angle,
           rMid,
           childAngle,
           LEVEL_R[ri],
@@ -1388,7 +1347,6 @@ function render(data) {
           lineWidth
         );
 
-        // Criar objeto do time filho
         const teamObj = winnerTeam || {
           name: 'TBD',
           logo: null,
@@ -1401,7 +1359,7 @@ function render(data) {
             score: match.score ? `${match.score.home ?? '?'} × ${match.score.away ?? '?'}` : '—',
             stage: round.label || `Fase ${ri + 1}`,
             date: new Date(match.date).toLocaleDateString('pt-BR'),
-            time: new Date(match.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}),
+            time: new Date(match.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
             status: match.status || 'SCHEDULED',
             isUpcoming: ['SCHEDULED', 'TIMED'].includes(match.status),
             isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
@@ -1413,7 +1371,6 @@ function render(data) {
           teamObj._matchData.opponent = (match.home?.id === winnerTeam.id) ? match.away : match.home;
         }
 
-        // Desenhar nó do filho
         const isChampion = (ri === rounds.length - 1) && decided && matches.length === 1;
         teamNode(
           teamObj,
