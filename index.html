@@ -447,345 +447,318 @@
   </div>
 
    <script type="module">
-    // ============================================================
-//  BRACKET CIRCULAR – PROPAGAÇÃO POR ID (PROFISSIONAL)
-//  ✅ usa match.id para progressão
-//  ✅ gera nextMatchId + slot (se API não tiver)
-//  ✅ distribuição angular uniforme (radianos)
-//  ✅ sem fallback de ângulo
-//  ✅ defs único
-// ============================================================
+  // ============================================================
+  //  BRACKET CIRCULAR – PROFISSIONAL (com nextMatchId + nextSlot)
+  //  ✅ backend já entrega rounds com nextMatchId e nextSlot
+  //  ✅ front usa esses links para propagar vencedores e conectar
+  //  ✅ distribuição angular uniforme (radianos)
+  //  ✅ defs único
+  // ============================================================
 
-const NS = "http://www.w3.org/2000/svg";
-const CX = 500, CY = 500;
-const POLL_MS = 90_000;
+  const NS = "http://www.w3.org/2000/svg";
+  const CX = 500, CY = 500;
+  const POLL_MS = 90_000;
 
-// raios de fora para dentro
-const LEVEL_R = [460, 400, 338, 276, 214, 130];
-const BRANCH_COLORS = [
-  "#e6484f", "#3ddc84", "#f0c23d", "#4ea1f7",
-  "#b768e0", "#ff9f53", "#2ec4b6", "#ff6f91",
-];
-const GREY = "#3c3c40";
-const NODE_SIZE = 30;
+  const LEVEL_R = [460, 400, 338, 276, 214, 130];
+  const BRANCH_COLORS = [
+    "#e6484f", "#3ddc84", "#f0c23d", "#4ea1f7",
+    "#b768e0", "#ff9f53", "#2ec4b6", "#ff6f91",
+  ];
+  const GREY = "#3c3c40";
+  const NODE_SIZE = 30;
 
-const svg = document.getElementById("stage");
-const statusEl = document.getElementById("status");
-const tip = document.getElementById("tip");
+  const svg = document.getElementById("stage");
+  const statusEl = document.getElementById("status");
+  const tip = document.getElementById("tip");
 
-// ---------- FUNÇÕES AUXILIARES ----------
-function el(tag, attrs) {
-  const n = document.createElementNS(NS, tag);
-  for (const k in attrs) n.setAttribute(k, attrs[k]);
-  return n;
-}
-
-function polar(r, angleRad) {
-  // angleRad em radianos, 0 = topo (12h)
-  const x = CX + r * Math.sin(angleRad);
-  const y = CY - r * Math.cos(angleRad);
-  return [x, y];
-}
-
-function clear(node) {
-  while (node.lastChild) node.removeChild(node.lastChild);
-}
-
-// ---------- CRIAÇÃO DE <defs> ÚNICO ----------
-function getDefs() {
-  let defs = document.getElementById("defs");
-  if (!defs) {
-    defs = el("defs", { id: "defs" });
-    svg.prepend(defs);
-  }
-  return defs;
-}
-
-// ---------- DESENHO DE FUNDO ----------
-function drawBackground() {
-  const defs = getDefs();
-  if (!document.getElementById("bgGlow")) {
-    const grad = el("radialGradient", { id: "bgGlow", cx: "50%", cy: "50%", r: "55%" });
-    grad.appendChild(el("stop", { offset: "0%", "stop-color": "#3a2c0c" }));
-    grad.appendChild(el("stop", { offset: "55%", "stop-color": "#15120a" }));
-    grad.appendChild(el("stop", { offset: "100%", "stop-color": "#0b0b0c" }));
-    defs.appendChild(grad);
-  }
-  svg.appendChild(el("rect", { x: 0, y: 0, width: 1000, height: 1000, fill: "url(#bgGlow)" }));
-
-  LEVEL_R.forEach((r) => {
-    svg.appendChild(
-      el("circle", { cx: CX, cy: CY, r, fill: "none", stroke: "#222226", "stroke-width": 1 })
-    );
-  });
-}
-
-// ---------- TAÇA ----------
-function drawTrophy() {
-  const g = el("g", {});
-  g.appendChild(el("circle", { cx: CX, cy: CY, r: 56, fill: "#0b0b0c", stroke: "#3a2c0c", "stroke-width": 2 }));
-  const t = el("text", { x: CX, y: CY + 8, "text-anchor": "middle", "font-size": 40, fill: "#d9a531" });
-  t.textContent = "🏆";
-  g.appendChild(t);
-  svg.appendChild(g);
-}
-
-// ---------- CONECTOR ----------
-function drawConnector(r1, angleA, r2, angleB, rMid, childAngle, rChild, color) {
-  const g = el("g", { fill: "none", stroke: color, "stroke-width": 2, "stroke-linecap": "round" });
-
-  const [x1, y1] = polar(r1, angleA);
-  const [mx1, my1] = polar(rMid, angleA);
-  const [x2, y2] = polar(r2, angleB);
-  const [mx2, my2] = polar(rMid, angleB);
-  const [cmx, cmy] = polar(rMid, childAngle);
-  const [cx2, cy2] = polar(rChild, childAngle);
-
-  g.appendChild(el("path", { d: `M${x1},${y1} L${mx1},${my1}` }));
-  g.appendChild(el("path", { d: `M${x2},${y2} L${mx2},${my2}` }));
-  const diff = angleB - angleA;
-  const large = Math.abs(diff) > Math.PI ? 1 : 0;
-  g.appendChild(el("path", { d: `M${mx1},${my1} A${rMid},${rMid} 0 ${large} 1 ${mx2},${my2}` }));
-  g.appendChild(el("path", { d: `M${cmx},${cmy} L${cx2},${cy2}` }));
-
-  svg.appendChild(g);
-}
-
-// ---------- NÓ DE TIME ----------
-function drawTeamNode(team, r, angleRad, branchColor, pending) {
-  const [x, y] = polar(r, angleRad);
-  const size = NODE_SIZE;
-  const g = el("g", { class: "node", "data-x": x, "data-y": y });
-
-  const defs = getDefs();
-  const clipId = `clip-${team?.id || Math.random().toString(36).slice(2)}`;
-  let clip = document.getElementById(clipId);
-  if (!clip) {
-    clip = el("clipPath", { id: clipId });
-    clip.appendChild(el("circle", { cx: x, cy: y, r: size / 2 }));
-    defs.appendChild(clip);
+  function el(tag, attrs) {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    return n;
   }
 
-  g.appendChild(
-    el("circle", { cx: x, cy: y, r: size / 2 + 2, fill: "#101012", stroke: pending ? GREY : branchColor, "stroke-width": 2 })
-  );
-
-  if (team && team.logo) {
-    const img = el("image", {
-      x: x - size / 2, y: y - size / 2, width: size, height: size,
-      href: team.logo,
-      "clip-path": `url(#${clipId})`,
-      class: "node-img" + (pending ? " pending" : ""),
-      preserveAspectRatio: "xMidYMid slice",
-    });
-    g.appendChild(img);
-  } else {
-    g.appendChild(el("circle", { cx: x, cy: y, r: size / 2 - 4, fill: "#222226" }));
+  function polar(r, angleRad) {
+    const x = CX + r * Math.sin(angleRad);
+    const y = CY - r * Math.cos(angleRad);
+    return [x, y];
   }
 
-  if (team && team.name) {
-    g.addEventListener("mousemove", (ev) => {
-      tip.textContent = team.name;
-      tip.style.left = ev.clientX + "px";
-      tip.style.top = ev.clientY + "px";
-      tip.style.opacity = 1;
-    });
-    g.addEventListener("mouseleave", () => (tip.style.opacity = 0));
+  function clear(node) {
+    while (node.lastChild) node.removeChild(node.lastChild);
   }
 
-  svg.appendChild(g);
-}
+  function getDefs() {
+    let defs = document.getElementById("defs");
+    if (!defs) {
+      defs = el("defs", { id: "defs" });
+      svg.prepend(defs);
+    }
+    return defs;
+  }
 
-// ---------- PROPAGAÇÃO DE VENCEDORES (POR ID) ----------
-function propagateWinners(rounds) {
-  // 1. Construir mapa de matches por ID
-  const matchMap = new Map();
-  rounds.forEach(round => {
-    round.matches.forEach(match => {
-      matchMap.set(match.fixtureId || match.id, match);
-    });
-  });
-
-  // 2. Gerar nextMatchId + nextSlot se não existirem
-  for (let r = 0; r < rounds.length - 1; r++) {
-    const curr = rounds[r];
-    const next = rounds[r + 1];
-    // Assumindo que a ordem está correta (cada match da fase atual se conecta a um da próxima)
-    curr.matches.forEach((match, idx) => {
-      const nextIndex = Math.floor(idx / 2);
-      if (nextIndex < next.matches.length) {
-        const nextMatch = next.matches[nextIndex];
-        match.nextMatchId = nextMatch.fixtureId || nextMatch.id;
-        match.nextSlot = (idx % 2 === 0) ? "home" : "away";
-      }
+  function drawBackground() {
+    const defs = getDefs();
+    if (!document.getElementById("bgGlow")) {
+      const grad = el("radialGradient", { id: "bgGlow", cx: "50%", cy: "50%", r: "55%" });
+      grad.appendChild(el("stop", { offset: "0%", "stop-color": "#3a2c0c" }));
+      grad.appendChild(el("stop", { offset: "55%", "stop-color": "#15120a" }));
+      grad.appendChild(el("stop", { offset: "100%", "stop-color": "#0b0b0c" }));
+      defs.appendChild(grad);
+    }
+    svg.appendChild(el("rect", { x: 0, y: 0, width: 1000, height: 1000, fill: "url(#bgGlow)" }));
+    LEVEL_R.forEach((r) => {
+      svg.appendChild(
+        el("circle", { cx: CX, cy: CY, r, fill: "none", stroke: "#222226", "stroke-width": 1 })
+      );
     });
   }
 
-  // 3. Propagar vencedores
-  rounds.forEach(round => {
-    round.matches.forEach(match => {
-      // Determinar vencedor
-      let winner = null;
-      if (match.winnerId != null) {
-        winner = (match.home?.id === match.winnerId) ? match.home : match.away;
-      } else if (match.status === "FINISHED" && match.score) {
-        const h = match.score?.home ?? 0;
-        const a = match.score?.away ?? 0;
-        if (h > a) winner = match.home;
-        else if (a > h) winner = match.away;
-        else if (match.score?.penalties) {
-          const ph = match.score.penalties?.home ?? 0;
-          const pa = match.score.penalties?.away ?? 0;
-          if (ph > pa) winner = match.home;
-          else if (pa > ph) winner = match.away;
-        }
-      }
-
-      if (!winner || !match.nextMatchId) return;
-
-      const nextMatch = matchMap.get(match.nextMatchId);
-      if (!nextMatch) return;
-
-      if (match.nextSlot === "home") {
-        nextMatch.home = winner;
-      } else {
-        nextMatch.away = winner;
-      }
-    });
-  });
-}
-
-// ---------- RENDER PRINCIPAL ----------
-function render(data) {
-  const defs = document.getElementById("defs");
-  clear(svg);
-  if (defs) svg.appendChild(defs);
-
-  drawBackground();
-
-  // --- 1. PROPAGAR VENCEDORES (ANTES DE RENDERIZAR) ---
-  propagateWinners(data.rounds);
-
-  // --- 2. PEGAR FOLHAS (primeira fase) ---
-  const leaves = data.leaves || [];
-  const N = leaves.length;
-  if (N === 0) {
-    statusEl.innerHTML = "Nenhum time encontrado para a primeira fase.";
-    return;
+  function drawTrophy() {
+    const g = el("g", {});
+    g.appendChild(el("circle", { cx: CX, cy: CY, r: 56, fill: "#0b0b0c", stroke: "#3a2c0c", "stroke-width": 2 }));
+    const t = el("text", { x: CX, y: CY + 8, "text-anchor": "middle", "font-size": 40, fill: "#d9a531" });
+    t.textContent = "🏆";
+    g.appendChild(t);
+    svg.appendChild(g);
   }
 
-  // --- 3. RENDERIZAR FOLHAS ---
-  let previousNodes = leaves.map((team, i) => {
-    const angleRad = (i / N) * 2 * Math.PI - Math.PI / 2;
-    const branchSize = N / 8;
-    const branchIdx = Math.floor(i / branchSize) % 8;
-    drawTeamNode(team, LEVEL_R[0], angleRad, BRANCH_COLORS[branchIdx], false);
-    return { team, angle: angleRad, branchIdx, decided: true };
-  });
+  function drawConnector(r1, angleA, r2, angleB, rMid, childAngle, rChild, color) {
+    const g = el("g", { fill: "none", stroke: color, "stroke-width": 2, "stroke-linecap": "round" });
+    const [x1, y1] = polar(r1, angleA);
+    const [mx1, my1] = polar(rMid, angleA);
+    const [x2, y2] = polar(r2, angleB);
+    const [mx2, my2] = polar(rMid, angleB);
+    const [cmx, cmy] = polar(rMid, childAngle);
+    const [cx2, cy2] = polar(rChild, childAngle);
 
-  // --- 4. RENDERIZAR FASES SEGUINTES (USANDO MATCHES JÁ PROPAGADOS) ---
-  const rounds = data.rounds || [];
-  let level = 0;
+    g.appendChild(el("path", { d: `M${x1},${y1} L${mx1},${my1}` }));
+    g.appendChild(el("path", { d: `M${x2},${y2} L${mx2},${my2}` }));
+    const diff = angleB - angleA;
+    const large = Math.abs(diff) > Math.PI ? 1 : 0;
+    g.appendChild(el("path", { d: `M${mx1},${my1} A${rMid},${rMid} 0 ${large} 1 ${mx2},${my2}` }));
+    g.appendChild(el("path", { d: `M${cmx},${cmy} L${cx2},${cy2}` }));
+    svg.appendChild(g);
+  }
 
-  for (let ri = 0; ri < rounds.length; ri++) {
-    const round = rounds[ri];
-    const matches = round.matches || [];
-    const r1 = LEVEL_R[level];
-    const r2 = LEVEL_R[level + 1];
-    const rMid = (r1 + r2) / 2;
+  function drawTeamNode(team, r, angleRad, branchColor, pending) {
+    const [x, y] = polar(r, angleRad);
+    const size = NODE_SIZE;
+    const g = el("g", { class: "node", "data-x": x, "data-y": y });
 
-    const currentNodes = [];
-
-    for (let i = 0; i < matches.length; i++) {
-      const match = matches[i];
-      // Encontrar os pais usando os IDs dos times (não por posição)
-      const homeParent = previousNodes.find(n => n.team?.id === match.home?.id);
-      const awayParent = previousNodes.find(n => n.team?.id === match.away?.id);
-
-      // Se algum pai não for encontrado, pular (não desenha)
-      if (!homeParent || !awayParent) continue;
-
-      // Ângulo do filho = média dos ângulos dos pais (ajustado para wrap)
-      let childAngle = (homeParent.angle + awayParent.angle) / 2;
-      let diff = awayParent.angle - homeParent.angle;
-      if (diff > Math.PI) diff -= 2 * Math.PI;
-      if (diff < -Math.PI) diff += 2 * Math.PI;
-      childAngle = homeParent.angle + diff / 2;
-
-      // Determinar vencedor (já propagado, mas podemos recalcular para segurança)
-      let winnerTeam = null;
-      let decided = false;
-      if (match.winnerId != null) {
-        decided = true;
-        winnerTeam = (match.home?.id === match.winnerId) ? match.home : match.away;
-      } else if (match.status === "FINISHED" && match.score) {
-        const h = match.score?.home ?? 0;
-        const a = match.score?.away ?? 0;
-        if (h > a) { decided = true; winnerTeam = match.home; }
-        else if (a > h) { decided = true; winnerTeam = match.away; }
-        else if (match.score?.penalties) {
-          const ph = match.score.penalties?.home ?? 0;
-          const pa = match.score.penalties?.away ?? 0;
-          if (ph > pa) { decided = true; winnerTeam = match.home; }
-          else if (pa > ph) { decided = true; winnerTeam = match.away; }
-        }
-      }
-
-      const winnerIsHome = decided && winnerTeam && winnerTeam.id === match.home?.id;
-      const branchIdx = decided
-        ? (winnerIsHome ? homeParent.branchIdx : awayParent.branchIdx)
-        : homeParent.branchIdx;
-      const color = decided ? BRANCH_COLORS[branchIdx] : GREY;
-
-      // Desenhar conector
-      drawConnector(r1, homeParent.angle, r1, awayParent.angle, rMid, childAngle, r2, color);
-
-      // Criar nó do vencedor (ou TBD)
-      const teamObj = winnerTeam || {
-        name: `TBD`,
-        logo: null,
-        id: null,
-        code: null,
-      };
-      drawTeamNode(teamObj, r2, childAngle, decided ? BRANCH_COLORS[branchIdx] : GREY, !decided);
-
-      currentNodes.push({
-        team: teamObj,
-        angle: childAngle,
-        branchIdx: branchIdx,
-        decided: decided,
-      });
+    const defs = getDefs();
+    const clipId = `clip-${team?.id || Math.random().toString(36).slice(2)}`;
+    let clip = document.getElementById(clipId);
+    if (!clip) {
+      clip = el("clipPath", { id: clipId });
+      clip.appendChild(el("circle", { cx: x, cy: y, r: size / 2 }));
+      defs.appendChild(clip);
     }
 
-    previousNodes = currentNodes;
-    level += 1;
-    if (currentNodes.length === 0) break;
+    g.appendChild(
+      el("circle", { cx: x, cy: y, r: size / 2 + 2, fill: "#101012", stroke: pending ? GREY : branchColor, "stroke-width": 2 })
+    );
+
+    if (team && team.logo) {
+      const img = el("image", {
+        x: x - size / 2, y: y - size / 2, width: size, height: size,
+        href: team.logo,
+        "clip-path": `url(#${clipId})`,
+        class: "node-img" + (pending ? " pending" : ""),
+        preserveAspectRatio: "xMidYMid slice",
+      });
+      g.appendChild(img);
+    } else {
+      g.appendChild(el("circle", { cx: x, cy: y, r: size / 2 - 4, fill: "#222226" }));
+    }
+
+    if (team && team.name) {
+      g.addEventListener("mousemove", (ev) => {
+        tip.textContent = team.name;
+        tip.style.left = ev.clientX + "px";
+        tip.style.top = ev.clientY + "px";
+        tip.style.opacity = 1;
+      });
+      g.addEventListener("mouseleave", () => (tip.style.opacity = 0));
+    }
+
+    svg.appendChild(g);
   }
 
-  drawTrophy();
+  // ---------- PROPAGAÇÃO DE VENCEDORES USANDO nextMatchId ----------
+  function propagateWinners(rounds) {
+    // Construir mapa de matches por ID
+    const matchMap = new Map();
+    rounds.forEach(round => {
+      round.matches.forEach(match => {
+        const id = match.fixtureId || match.id;
+        if (id) matchMap.set(id, match);
+      });
+    });
 
-  const ts = new Date(data.updatedAt).toLocaleString("pt-BR");
-  statusEl.innerHTML = `Atualizado em ${ts} <button id="refreshBtn">Atualizar agora</button>`;
+    // Para cada match, verificar se tem vencedor e propagar para o próximo
+    rounds.forEach(round => {
+      round.matches.forEach(match => {
+        let winner = null;
+        if (match.winnerId != null) {
+          winner = (match.home?.id === match.winnerId) ? match.home : match.away;
+        } else if (match.status === "FINISHED" && match.score) {
+          const h = match.score?.home ?? 0;
+          const a = match.score?.away ?? 0;
+          if (h > a) winner = match.home;
+          else if (a > h) winner = match.away;
+          else if (match.score?.penalties) {
+            const ph = match.score.penalties?.home ?? 0;
+            const pa = match.score.penalties?.away ?? 0;
+            if (ph > pa) winner = match.home;
+            else if (pa > ph) winner = match.away;
+          }
+        }
+
+        if (!winner) return;
+        if (!match.nextMatchId) return;
+
+        const nextMatch = matchMap.get(match.nextMatchId);
+        if (!nextMatch) return;
+
+        if (match.nextSlot === "home") {
+          nextMatch.home = winner;
+        } else if (match.nextSlot === "away") {
+          nextMatch.away = winner;
+        }
+      });
+    });
+  }
+
+  // ---------- RENDER PRINCIPAL ----------
+  function render(data) {
+    const defs = document.getElementById("defs");
+    clear(svg);
+    if (defs) svg.appendChild(defs);
+
+    drawBackground();
+
+    // Propagar vencedores usando nextMatchId
+    propagateWinners(data.rounds);
+
+    // --- Obter folhas (primeira fase) ---
+    const leaves = data.leaves || [];
+    const N = leaves.length;
+    if (N === 0) {
+      statusEl.innerHTML = "Nenhum time encontrado para a primeira fase.";
+      return;
+    }
+
+    // --- Renderizar folhas ---
+    let previousNodes = leaves.map((team, i) => {
+      const angleRad = (i / N) * 2 * Math.PI - Math.PI / 2;
+      const branchSize = N / 8;
+      const branchIdx = Math.floor(i / branchSize) % 8;
+      drawTeamNode(team, LEVEL_R[0], angleRad, BRANCH_COLORS[branchIdx], false);
+      return { team, angle: angleRad, branchIdx, decided: true };
+    });
+
+    // --- Renderizar rounds seguintes (usando nextMatchId para encontrar pais) ---
+    const rounds = data.rounds || [];
+    let level = 0;
+
+    for (let ri = 0; ri < rounds.length; ri++) {
+      const round = rounds[ri];
+      const matches = round.matches || [];
+      const r1 = LEVEL_R[level];
+      const r2 = LEVEL_R[level + 1];
+      const rMid = (r1 + r2) / 2;
+
+      const currentNodes = [];
+
+      for (let i = 0; i < matches.length; i++) {
+        const match = matches[i];
+        // Encontrar os pais pelos IDs dos times
+        const homeParent = previousNodes.find(n => n.team?.id === match.home?.id);
+        const awayParent = previousNodes.find(n => n.team?.id === match.away?.id);
+
+        if (!homeParent || !awayParent) continue;
+
+        // Ângulo do filho (média dos ângulos dos pais, com ajuste de wrap)
+        let childAngle = (homeParent.angle + awayParent.angle) / 2;
+        let diff = awayParent.angle - homeParent.angle;
+        if (diff > Math.PI) diff -= 2 * Math.PI;
+        if (diff < -Math.PI) diff += 2 * Math.PI;
+        childAngle = homeParent.angle + diff / 2;
+
+        // Determinar vencedor (já propagado, mas recalcular para segurança)
+        let winnerTeam = null;
+        let decided = false;
+        if (match.winnerId != null) {
+          decided = true;
+          winnerTeam = (match.home?.id === match.winnerId) ? match.home : match.away;
+        } else if (match.status === "FINISHED" && match.score) {
+          const h = match.score?.home ?? 0;
+          const a = match.score?.away ?? 0;
+          if (h > a) { decided = true; winnerTeam = match.home; }
+          else if (a > h) { decided = true; winnerTeam = match.away; }
+          else if (match.score?.penalties) {
+            const ph = match.score.penalties?.home ?? 0;
+            const pa = match.score.penalties?.away ?? 0;
+            if (ph > pa) { decided = true; winnerTeam = match.home; }
+            else if (pa > ph) { decided = true; winnerTeam = match.away; }
+          }
+        }
+
+        const winnerIsHome = decided && winnerTeam && winnerTeam.id === match.home?.id;
+        const branchIdx = decided
+          ? (winnerIsHome ? homeParent.branchIdx : awayParent.branchIdx)
+          : homeParent.branchIdx;
+        const color = decided ? BRANCH_COLORS[branchIdx] : GREY;
+
+        // Desenhar conector (sempre, mesmo se não decidido, para mostrar estrutura)
+        drawConnector(r1, homeParent.angle, r1, awayParent.angle, rMid, childAngle, r2, color);
+
+        // Criar nó do vencedor (ou TBD)
+        const teamObj = winnerTeam || {
+          name: `TBD`,
+          logo: null,
+          id: null,
+          code: null,
+        };
+        drawTeamNode(teamObj, r2, childAngle, decided ? BRANCH_COLORS[branchIdx] : GREY, !decided);
+
+        currentNodes.push({
+          team: teamObj,
+          angle: childAngle,
+          branchIdx: branchIdx,
+          decided: decided,
+        });
+      }
+
+      previousNodes = currentNodes;
+      level += 1;
+      if (currentNodes.length === 0) break;
+    }
+
+    drawTrophy();
+
+    const ts = new Date(data.updatedAt).toLocaleString("pt-BR");
+    statusEl.innerHTML = `Atualizado em ${ts} <button id="refreshBtn">Atualizar agora</button>`;
+    document.getElementById("refreshBtn").addEventListener("click", load);
+  }
+
+  // ---------- LOAD E POLLING ----------
+  async function load() {
+    statusEl.textContent = "Atualizando…";
+    try {
+      const res = await fetch("/api/bracket", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro desconhecido");
+      render(data);
+    } catch (err) {
+      svg.innerHTML = "";
+      statusEl.innerHTML = `<div class="err">Não foi possível carregar o bracket: ${String(err.message || err)}</div>`;
+    }
+  }
+
   document.getElementById("refreshBtn").addEventListener("click", load);
-}
-
-// ---------- LOAD E POLLING ----------
-async function load() {
-  statusEl.textContent = "Atualizando…";
-  try {
-    const res = await fetch("/api/bracket", { cache: "no-store" });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Erro desconhecido");
-    render(data);
-  } catch (err) {
-    svg.innerHTML = "";
-    statusEl.innerHTML = `<div class="err">Não foi possível carregar o bracket: ${String(err.message || err)}</div>`;
-  }
-}
-
-document.getElementById("refreshBtn").addEventListener("click", load);
-load();
-setInterval(load, POLL_MS);
+  load();
+  setInterval(load, POLL_MS);
      
   </script>
 </body>
