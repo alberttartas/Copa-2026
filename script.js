@@ -110,74 +110,71 @@ function buildFixedLayout(totalLeaves) {
 
 // ============================================================
 // MAPEAMENTO API → SLOTS (POR fixtureId)
-// ============================================================
+// ===
 
 function mapApiToSlots(leaves, rounds) {
   const totalLeaves = leaves.length || 32;
   const layout = buildFixedLayout(totalLeaves);
 
-  // ---------- MAPA DE SLOTS POR ID ----------
-  const slotMap = new Map();
-  for (const layer of layout) {
-    for (const slot of layer) {
-      slotMap.set(slot.id, slot);
-    }
-  }
-
-  // ---------- ROUND 0: FOLHAS ----------
+  // 1. ROUND 0: Posiciona as folhas iniciais na ordem da API
   const leafSlots = layout[0] || [];
   for (let i = 0; i < leaves.length && i < leafSlots.length; i++) {
     const slot = leafSlots[i];
-    const team = leaves[i];
-    slot.team = team;
+    slot.team = leaves[i];
     slot.isPending = false;
     slot.isWinner = false;
-    slot.matchId = null;
-    slot.colorIndex = i % COLORS.length;
   }
 
-  // ---------- ROUNDS SEGUINTES ----------
+  // 2. ROUNDS SEGUINTES: Mapeamento Lógico por descendência direta
+  // Em vez de seguir o índice 'i' da API, o slot do filho depende de quais 
+  // eram os slots dos pais no round anterior.
   for (let ri = 0; ri < rounds.length; ri++) {
     const round = rounds[ri];
     const matches = round.matches || [];
-    const nextLayer = layout[ri + 1] || [];
+    const currentLayer = layout[ri];     // Camada dos pais
+    const nextLayer = layout[ri + 1] || []; // Camada dos filhos
 
-    // 🔥 Atribuir cada match ao slot correspondente (por posição, mas a posição é fixa)
-    for (let i = 0; i < matches.length && i < nextLayer.length; i++) {
-      const match = matches[i];
-      const slot = nextLayer[i]; // POSIÇÃO FIXA (não depende do match)
+    // Para cada slot de jogo futuro (filho), olhamos os dois slots que o geraram
+    for (let i = 0; i < nextLayer.length; i++) {
+      const slotFilho = nextLayer[i];
+      
+      // Os dois slots "pais" que geram este slot filho
+      const pai1 = currentLayer[i * 2];
+      const pai2 = currentLayer[i * 2 + 1];
 
-      // Determinar vencedor
-      let winner = null;
-      let decided = false;
+      // Procuramos na API o jogo onde o Time A (pai1) enfrenta o Time B (pai2)
+      // Ou buscamos pela ordem lógica esperada do cruzamento
+      const match = matches.find(m => 
+        (m.home?.id === pai1.team?.id || m.away?.id === pai1.team?.id) ||
+        (m.home?.id === pai2.team?.id || m.away?.id === pai2.team?.id)
+      ) || matches[i]; // Fallback caso o jogo ainda não tenha times definidos
 
-      if (match.winnerId != null) {
-        decided = true;
-        winner = match.home?.id === match.winnerId ? match.home : match.away;
-      } else if (match.status === 'FINISHED' && match.score) {
-        const h = match.score?.home ?? 0;
-        const a = match.score?.away ?? 0;
-        if (h > a) { decided = true;
-          winner = match.home; } else if (a > h) { decided = true;
-          winner = match.away; } else if (match.score?.penalties) {
-          const ph = match.score.penalties?.home ?? 0;
-          const pa = match.score.penalties?.away ?? 0;
-          if (ph > pa) { decided = true;
-            winner = match.home; } else if (pa > ph) { decided = true;
-            winner = match.away; }
+      if (match) {
+        let winner = null;
+        let decided = false;
+
+        if (match.winnerId != null) {
+          decided = true;
+          winner = match.home?.id === match.winnerId ? match.home : match.away;
+        } else if (match.status === 'FINISHED' && match.score) {
+          const h = match.score?.home ?? 0;
+          const a = match.score?.away ?? 0;
+          if (h > a) { decided = true; winner = match.home; } 
+          else if (a > h) { decided = true; winner = match.away; }
         }
-      }
 
-      slot.team = winner || null;
-      slot.isPending = !decided;
-      slot.matchId = match.fixtureId;
-      slot.isWinner = decided;
-      slot.colorIndex = i % COLORS.length;
+        // Aloca os dados da API no slot geometricamente correto!
+        slotFilho.team = winner || null;
+        slotFilho.isPending = !decided;
+        slotFilho.matchId = match.fixtureId;
+        slotFilho.isWinner = decided;
+      }
     }
   }
 
   return layout;
 }
+
 
 // ============================================================
 // RENDER SVG
