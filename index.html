@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Copa do Mundo 2026 — Chave Automática</title>
+<title>Copa do Mundo 2026 — Chave Oficial</title>
 <style>
   :root {
     --bg: #0b0b0c;
@@ -23,7 +23,6 @@
     min-height: 100vh;
   }
 
-  /* Header com efeito vidro */
   header {
     position: sticky;
     top: 0;
@@ -49,7 +48,6 @@
     color: var(--muted);
   }
 
-  /* Painel de informações ao vivo */
   #livePanel {
     max-width: 880px;
     margin: 12px auto;
@@ -63,6 +61,16 @@
     grid-template-columns: 1fr 1fr;
     gap: 20px;
     font-size: 13px;
+    transition: grid-template-columns 0.2s;
+  }
+  #livePanel.no-live {
+    grid-template-columns: 1fr;
+  }
+  #livePanel.no-live .live-match {
+    display: none;
+  }
+  #livePanel.no-live .next-match {
+    justify-content: center;
   }
   #livePanel .live-match {
     display: flex;
@@ -159,14 +167,6 @@
     display: block;
   }
 
-  /* Tamanhos dos nós por fase */
-  .node-r32 { --size: 28px; }
-  .node-r16 { --size: 34px; }
-  .node-qf { --size: 42px; }
-  .node-sf { --size: 52px; }
-  .node-final { --size: 66px; }
-  .node-champion { --size: 80px; }
-
   .node-img {
     filter: drop-shadow(0 1px 3px rgba(0,0,0,.6));
   }
@@ -181,6 +181,11 @@
     50% { filter: drop-shadow(0 0 40px rgba(217,165,49,0.9)); }
   }
 
+  .conf-badge {
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,.75));
+    pointer-events: none;
+  }
+
   .ring-label {
     fill: var(--muted);
     font-size: 9px;
@@ -188,7 +193,6 @@
     text-transform: uppercase;
   }
 
-  /* Tooltip melhorado */
   .tooltip-modern {
     position: fixed;
     pointer-events: none;
@@ -205,6 +209,7 @@
     box-shadow: 0 20px 60px rgba(0,0,0,0.8);
   }
   .tooltip-modern.visible { opacity: 1; }
+  .tooltip-modern.pinned { pointer-events: auto; }
   .tooltip-modern .tt-header {
     display: flex;
     align-items: center;
@@ -243,51 +248,26 @@
     align-items: center;
     gap: 4px;
   }
-
-  #status {
-    text-align: center;
-    font-size: 11px;
-    color: var(--muted);
-    padding: 10px 0 28px;
-  }
-  #status button {
-    background: none;
-    border: 1px solid var(--grey);
-    color: var(--text);
-    border-radius: 6px;
-    padding: 4px 12px;
-    margin-left: 8px;
+  .tooltip-modern .tt-close {
     cursor: pointer;
-    font-size: 11px;
-    transition: all 0.2s;
-  }
-  #status button:hover { border-color: var(--gold); color: var(--gold); }
-  .err {
-    max-width: 560px;
-    margin: 20px auto;
-    padding: 14px 18px;
-    border: 1px solid #5b2a2a;
-    background: #1c1010;
-    border-radius: 8px;
+    color: var(--muted);
     font-size: 13px;
-    color: #f3b7b7;
+    margin-left: auto;
+    padding: 0 4px;
   }
-
-  @media (max-width: 640px) {
-    #livePanel {
-      grid-template-columns: 1fr;
-      gap: 10px;
-      padding: 10px 14px;
-      font-size: 12px;
-    }
-    #livePanel .next-match {
-      justify-content: flex-start;
-    }
-    #livePanel .match-score {
-      font-size: 16px;
-    }
+  .tooltip-modern .tt-close:hover { color: var(--gold); }
+  .tooltip-modern .tt-loading {
+    color: var(--muted);
+    font-size: 12px;
   }
-    /* Estilos específicos para tooltip de jogos futuros */
+  .tooltip-modern .tt-info-row {
+    font-size: 12px;
+    margin-top: 4px;
+    line-height: 1.5;
+  }
+  .tooltip-modern .tt-info-row strong {
+    color: var(--text);
+  }
   .tooltip-modern .tt-upcoming {
     text-align: center;
   }
@@ -335,22 +315,6 @@
     padding-top: 6px;
     border-top: 1px solid rgba(255,255,255,0.05);
   }
-  .tooltip-modern .tt-upcoming .tt-venue {
-    color: var(--muted);
-    font-size: 12px;
-  }
-
-  /* Animações suaves para o tooltip */
-  .tooltip-modern {
-    transition: opacity 0.2s ease, transform 0.2s ease;
-    transform: translateY(2px);
-  }
-  .tooltip-modern.visible {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  /* Estilo para jogos ao vivo no tooltip */
   .tooltip-modern .tt-live-indicator {
     display: inline-block;
     width: 8px;
@@ -361,8 +325,48 @@
     margin-right: 4px;
   }
 
-  /* Tooltip para mobile - ajuste de tamanho */
-  @media (max-width: 480px) {
+  #status {
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted);
+    padding: 10px 0 28px;
+  }
+  #status button {
+    background: none;
+    border: 1px solid var(--grey);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 4px 12px;
+    margin-left: 8px;
+    cursor: pointer;
+    font-size: 11px;
+    transition: all 0.2s;
+  }
+  #status button:hover { border-color: var(--gold); color: var(--gold); }
+  .err {
+    max-width: 560px;
+    margin: 20px auto;
+    padding: 14px 18px;
+    border: 1px solid #5b2a2a;
+    background: #1c1010;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #f3b7b7;
+  }
+
+  @media (max-width: 640px) {
+    #livePanel {
+      grid-template-columns: 1fr;
+      gap: 10px;
+      padding: 10px 14px;
+      font-size: 12px;
+    }
+    #livePanel .next-match {
+      justify-content: flex-start;
+    }
+    #livePanel .match-score {
+      font-size: 16px;
+    }
     .tooltip-modern {
       min-width: 150px;
       padding: 10px 12px;
@@ -390,10 +394,9 @@
 <body>
   <header>
     <h1>🏆 FIFA World Cup 2026</h1>
-    <p>Chave do mata-mata — atualizada automaticamente via API</p>
+    <p>Chave do mata-mata — atualizada automaticamente via API · clique numa seleção para ver último jogo e artilheiro</p>
   </header>
 
-  <!-- Painel Ao Vivo / Próximo Jogo -->
   <div id="livePanel">
     <div class="live-match">
       <span class="live-badge">● AO VIVO</span>
@@ -433,13 +436,9 @@
     const CX = 500, CY = 500;
     const POLL_MS = 90_000;
 
-    // Tamanhos dos nós por nível (do mais externo ao centro)
     const NODE_SIZE = [28, 34, 42, 52, 66, 80];
-    // Espessura das linhas por nível
     const LINE_WIDTH = [1.2, 2, 3, 4, 5];
-    // Brilho por nível (blur)
     const GLOW_AMOUNT = [4, 8, 14, 20, 26];
-
     const LEVEL_R = [460, 400, 338, 276, 214, 130];
     const BRANCH_COLORS = [
       "#e6484f", "#3ddc84", "#f0c23d", "#4ea1f7",
@@ -447,12 +446,37 @@
     ];
     const GREY = "#3c3c40";
 
+    const CONFEDERATIONS = {
+      GER:"uefa", FRA:"uefa", ESP:"uefa", ENG:"uefa", POR:"uefa", NED:"uefa",
+      ITA:"uefa", BEL:"uefa", CRO:"uefa", SUI:"uefa", DEN:"uefa", AUT:"uefa",
+      POL:"uefa", SRB:"uefa", TUR:"uefa", SCO:"uefa", WAL:"uefa", UKR:"uefa",
+      SWE:"uefa", NOR:"uefa", GRE:"uefa", CZE:"uefa", HUN:"uefa", SVK:"uefa",
+      ROU:"uefa", RUS:"uefa", ISL:"uefa", IRL:"uefa", BIH:"uefa", SVN:"uefa",
+      FIN:"uefa", ALB:"uefa", MKD:"uefa", MNE:"uefa", GEO:"uefa", KOS:"uefa",
+      BRA:"conmebol", ARG:"conmebol", URU:"conmebol", COL:"conmebol",
+      ECU:"conmebol", CHI:"conmebol", PAR:"conmebol", PER:"conmebol",
+      BOL:"conmebol", VEN:"conmebol",
+      USA:"concacaf", MEX:"concacaf", CAN:"concacaf", CRC:"concacaf",
+      JAM:"concacaf", PAN:"concacaf", HON:"concacaf", HAI:"concacaf",
+      CUW:"concacaf", GLP:"concacaf", SLV:"concacaf", TRI:"concacaf",
+      MAR:"caf", SEN:"caf", NGA:"caf", EGY:"caf", ALG:"caf", TUN:"caf",
+      GHA:"caf", CMR:"caf", CIV:"caf", RSA:"caf", CPV:"caf", COD:"caf",
+      MLI:"caf", BFA:"caf", GAB:"caf", ZAM:"caf", ANG:"caf", MOZ:"caf",
+      JPN:"afc", KOR:"afc", IRN:"afc", KSA:"afc", AUS:"afc", QAT:"afc",
+      IRQ:"afc", UAE:"afc", UZB:"afc", JOR:"afc", CHN:"afc", IND:"afc",
+      NZL:"ofc", TAH:"ofc", FIJ:"ofc", NCL:"ofc",
+    };
+
+    function getConfederation(code) {
+      if (!code) return null;
+      return CONFEDERATIONS[code.toUpperCase()] || null;
+    }
+
     const svg = document.getElementById("stage");
     const statusEl = document.getElementById("status");
     const tooltip = document.getElementById("tooltip");
     const livePanel = document.getElementById("livePanel");
 
-    // Cores para status dos jogos
     const STATUS_COLORS = {
       'LIVE': '#ff3b30',
       'FINISHED': '#34c759',
@@ -477,6 +501,9 @@
       'CANCELLED': 'CANCELADO'
     };
 
+    let allNodeGroups = [];
+    let currentData = null;
+
     function el(tag, attrs) {
       const n = document.createElementNS(NS, tag);
       for (const k in attrs) n.setAttribute(k, attrs[k]);
@@ -495,14 +522,12 @@
     function drawBackground() {
       const defs = el("defs", {});
       
-      // Gradiente radial atrás da taça
       const grad = el("radialGradient", { id: "bgGlow", cx: "50%", cy: "50%", r: "50%" });
       grad.appendChild(el("stop", { offset: "0%", "stop-color": "#3a2c0c", "stop-opacity": "0.6" }));
       grad.appendChild(el("stop", { offset: "30%", "stop-color": "#1c1508", "stop-opacity": "0.4" }));
       grad.appendChild(el("stop", { offset: "100%", "stop-color": "#0b0b0c", "stop-opacity": "1" }));
       defs.appendChild(grad);
 
-      // Filtros para glow (com intensidade variável)
       for (let i = 0; i < GLOW_AMOUNT.length; i++) {
         const filter = el("filter", { 
           id: `glow-${i}`, 
@@ -519,7 +544,6 @@
       svg.appendChild(defs);
       svg.appendChild(el("rect", { x: 0, y: 0, width: 1000, height: 1000, fill: "url(#bgGlow)" }));
 
-      // Anéis de referência sutis
       LEVEL_R.forEach((r) => {
         svg.appendChild(
           el("circle", { cx: CX, cy: CY, r, fill: "none", stroke: "#1c1c1f", "stroke-width": 0.5 })
@@ -530,12 +554,10 @@
     function drawTrophy() {
       const g = el("g", {});
       
-      // Círculo ao redor da taça
       g.appendChild(
         el("circle", { cx: CX, cy: CY, r: 62, fill: "#0b0b0c", stroke: "#3a2c0c", "stroke-width": 2 })
       );
       
-      // Texto girando ao redor
       const textGroup = el("g", {});
       const textRadius = 78;
       const label = "FINAL • 13 JUL • METLIFE STADIUM • NEW YORK • ";
@@ -554,7 +576,6 @@
         char.textContent = label[i];
         textGroup.appendChild(char);
       }
-      // Animação de rotação
       const anim = el("animateTransform", {
         attributeName: "transform",
         type: "rotate",
@@ -566,7 +587,6 @@
       textGroup.appendChild(anim);
       g.appendChild(textGroup);
 
-      // Taça
       const size = 76;
       g.appendChild(
         el("image", {
@@ -631,7 +651,6 @@
       defs.appendChild(clip);
       g.appendChild(defs);
 
-      // Círculo com borda
       const ring = el("circle", {
         cx: x, cy: y, r: size / 2 + 2.5,
         fill: pending ? "#101012" : "#151517",
@@ -645,7 +664,6 @@
       if (isChampion) {
         ring.setAttribute("stroke", "#d9a531");
         ring.setAttribute("stroke-width", "3");
-        // Animação de pulsação
         const anim = el("animate", {
           attributeName: "r",
           values: `${size/2 + 2.5};${size/2 + 5};${size/2 + 2.5}`,
@@ -663,7 +681,6 @@
       }
       g.appendChild(ring);
 
-      // Logo do time
       if (team && team.logo) {
         const img = el("image", {
           x: x - size / 2, y: y - size / 2, width: size, height: size,
@@ -677,101 +694,185 @@
         g.appendChild(el("circle", { cx: x, cy: y, r: size / 2 - 4, fill: "#222226" }));
       }
 
-      // Placar abaixo do escudo (se houver)
-      // Será adicionado pelo render
+      if (!pending && team && team.code) {
+        const conf = getConfederation(team.code);
+        if (conf) {
+          const badgeSize = Math.max(11, Math.round(size * 0.34));
+          const angleRad = Math.atan2(y - CY, x - CX);
+          const offset = size / 2 + badgeSize / 2 + 3;
+          const bx = x + Math.cos(angleRad) * offset;
+          const by = y + Math.sin(angleRad) * offset;
+          g.appendChild(el("image", {
+            x: bx - badgeSize / 2,
+            y: by - badgeSize / 2,
+            width: badgeSize,
+            height: badgeSize,
+            href: `/assets/img/federations/${conf}.svg`,
+            class: "conf-badge",
+            preserveAspectRatio: "xMidYMid meet",
+          }));
+        }
+      }
 
-      // Eventos de mouse para tooltip
       if (team && team.name) {
         g.addEventListener("mouseenter", (ev) => {
+          if (tooltip.classList.contains("pinned")) return;
           showTooltip(ev, team);
         });
         g.addEventListener("mousemove", (ev) => {
+          if (tooltip.classList.contains("pinned")) return;
           tooltip.style.left = (ev.clientX + 16) + "px";
           tooltip.style.top = (ev.clientY + 16) + "px";
         });
         g.addEventListener("mouseleave", () => {
+          if (tooltip.classList.contains("pinned")) return;
           tooltip.classList.remove("visible");
         });
+        if (team.id && !pending) {
+          g.style.cursor = "pointer";
+          g.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            showTeamDetails(ev, team);
+          });
+        }
       }
 
       svg.appendChild(g);
+      allNodeGroups.push(g);
       return g;
     }
 
-    // Versão completa e otimizada do showTooltip
-function showTooltip(ev, team) {
-  const match = team._matchData || {};
-  const isUpcoming = match.isUpcoming || match.status === 'SCHEDULED' || match.status === 'TIMED';
-  const isLive = match.isLive || match.status === 'IN_PLAY' || match.status === 'LIVE';
-  const isFinished = match.isFinished || match.status === 'FINISHED';
+    function showTooltip(ev, team) {
+      const match = team._matchData || {};
+      const isUpcoming = match.isUpcoming || match.status === 'SCHEDULED' || match.status === 'TIMED';
+      const isLive = match.isLive || match.status === 'IN_PLAY' || match.status === 'LIVE';
+      
+      let html = '';
+      
+      if (isUpcoming) {
+        html = `
+          <div class="tt-upcoming">
+            <span class="tt-badge">⏰ ${match.statusLabel || 'EM BREVE'}</span>
+            <div class="tt-teams">
+              ${match.homeName || '—'} <strong>vs</strong> ${match.awayName || '—'}
+            </div>
+            <div class="tt-datetime">
+              <span>📅 ${match.date || '--/--'}</span>
+              <span>🕘 ${match.time || '--:--'}</span>
+              ${match.venue ? `<span>📍 ${match.venue}</span>` : ''}
+            </div>
+            <div class="tt-stage">${match.stage || 'Fase eliminatória'}</div>
+          </div>
+        `;
+      } else if (isLive) {
+        html = `
+          <div class="tt-header">
+            <span class="tt-live-indicator"></span>
+            <span style="color: #ff3b30; font-weight: 700; font-size: 11px;">AO VIVO</span>
+          </div>
+          <div class="tt-header" style="margin-top: 2px;">
+            <img src="${team.logo || ''}" alt="${team.name}">
+            <span>${team.name}</span>
+            <span class="tt-vs">vs</span>
+            <img src="${match.opponent?.logo || ''}" alt="${match.opponent?.name || ''}">
+            <span>${match.opponent?.name || '—'}</span>
+          </div>
+          <div class="tt-score">${match.score || '0 × 0'}</div>
+          <div class="tt-details">
+            <span>🏆 ${match.stage || 'Fase'}</span>
+            <span>📅 ${match.date || '--/--'}</span>
+            <span>🕘 ${match.time || '--:--'}</span>
+            ${match.venue ? `<span>📍 ${match.venue}</span>` : ''}
+          </div>
+        `;
+      } else {
+        html = `
+          <div class="tt-header">
+            <img src="${team.logo || ''}" alt="${team.name}">
+            <span>${team.name}</span>
+            <span class="tt-vs">vs</span>
+            <img src="${match.opponent?.logo || ''}" alt="${match.opponent?.name || ''}">
+            <span>${match.opponent?.name || '—'}</span>
+          </div>
+          <div class="tt-score">${match.score || '—'}</div>
+          <div class="tt-details">
+            <span>🏆 ${match.stage || 'Fase'}</span>
+            <span>📅 ${match.date || '--/--'}</span>
+            ${match.venue ? `<span>📍 ${match.venue}</span>` : ''}
+            <span style="color: #34c759;">✅ ENCERRADO</span>
+          </div>
+        `;
+      }
 
-  let html = '';
-  
-  if (isUpcoming) {
-    // Tooltip para jogos futuros - limpo e informativo
-    html = `
-      <div class="tt-upcoming">
-        <span class="tt-badge">⏰ ${match.statusLabel || 'EM BREVE'}</span>
-        <div class="tt-teams">
-          ${match.homeName || '—'} <strong>vs</strong> ${match.awayName || '—'}
-        </div>
-        <div class="tt-datetime">
-          <span>📅 ${match.date || '--/--'}</span>
-          <span>🕘 ${match.time || '--:--'}</span>
-          ${match.venue ? `<span>📍 ${match.venue}</span>` : ''}
-        </div>
-        <div class="tt-stage">${match.stage || 'Fase eliminatória'}</div>
-      </div>
-    `;
-  } else if (isLive) {
-    // Tooltip para jogos ao vivo
-    html = `
-      <div class="tt-header">
-        <span class="tt-live-indicator"></span>
-        <span style="color: #ff3b30; font-weight: 700; font-size: 11px;">AO VIVO</span>
-      </div>
-      <div class="tt-header" style="margin-top: 2px;">
-        <img src="${team.logo || ''}" alt="${team.name}">
-        <span>${team.name}</span>
-        <span class="tt-vs">vs</span>
-        <img src="${match.opponent?.logo || ''}" alt="${match.opponent?.name || ''}">
-        <span>${match.opponent?.name || '—'}</span>
-      </div>
-      <div class="tt-score">${match.score || '0 × 0'}</div>
-      <div class="tt-details">
-        <span>🏆 ${match.stage || 'Fase'}</span>
-        <span>📅 ${match.date || '--/--'}</span>
-        <span>🕘 ${match.time || '--:--'}</span>
-        ${match.venue ? `<span>📍 ${match.venue}</span>` : ''}
-      </div>
-    `;
-  } else if (isFinished) {
-    // Tooltip para jogos encerrados
-    html = `
-      <div class="tt-header">
-        <img src="${team.logo || ''}" alt="${team.name}">
-        <span>${team.name}</span>
-        <span class="tt-vs">vs</span>
-        <img src="${match.opponent?.logo || ''}" alt="${match.opponent?.name || ''}">
-        <span>${match.opponent?.name || '—'}</span>
-      </div>
-      <div class="tt-score">${match.score || '—'}</div>
-      <div class="tt-details">
-        <span>🏆 ${match.stage || 'Fase'}</span>
-        <span>📅 ${match.date || '--/--'}</span>
-        ${match.venue ? `<span>📍 ${match.venue}</span>` : ''}
-        <span style="color: #34c759;">✅ ENCERRADO</span>
-      </div>
-    `;
-  }
+      tooltip.innerHTML = html;
+      tooltip.classList.add("visible");
+    }
 
-  tooltip.innerHTML = html;
-  tooltip.classList.add("visible");
-}
+    function showTeamDetails(ev, team) {
+      tooltip.style.left = (ev.clientX + 16) + "px";
+      tooltip.style.top = (ev.clientY + 16) + "px";
+      tooltip.innerHTML = `
+        <div class="tt-header">
+          <img src="${team.logo || ''}" alt="${team.name}">
+          <span>${team.name}</span>
+          <span class="tt-close" id="ttClose">✕</span>
+        </div>
+        <div class="tt-loading">Carregando…</div>
+      `;
+      tooltip.classList.add("visible", "pinned");
+      document.getElementById("ttClose")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        tooltip.classList.remove("visible", "pinned");
+      });
+
+      fetch(`/api/team-info?teamId=${team.id}`)
+        .then((r) => r.json())
+        .then((data) => {
+          const lm = data.lastMatch;
+          const ts = data.topScorer;
+          const lastMatchHtml = lm
+            ? `${lm.homeTeam} <strong>${lm.homeScore ?? '?'} × ${lm.awayScore ?? '?'}</strong> ${lm.awayTeam}`
+            : 'Sem jogos encerrados ainda.';
+          const scorerHtml = ts
+            ? `${ts.name} — ${ts.goals} gol${ts.goals === 1 ? '' : 's'}`
+            : 'Sem dados disponíveis.';
+          tooltip.innerHTML = `
+            <div class="tt-header">
+              <img src="${team.logo || ''}" alt="${team.name}">
+              <span>${team.name}</span>
+              <span class="tt-close" id="ttClose">✕</span>
+            </div>
+            <div class="tt-info-row"><strong>Último jogo:</strong><br>${lastMatchHtml}</div>
+            <div class="tt-info-row"><strong>Artilheiro da seleção:</strong><br>${scorerHtml}</div>
+          `;
+          document.getElementById("ttClose")?.addEventListener("click", (e) => {
+            e.stopPropagation();
+            tooltip.classList.remove("visible", "pinned");
+          });
+        })
+        .catch(() => {
+          tooltip.innerHTML = `
+            <div class="tt-header">
+              <span>${team.name}</span>
+              <span class="tt-close" id="ttClose">✕</span>
+            </div>
+            <div class="tt-details">Não foi possível carregar os dados agora.</div>
+          `;
+          document.getElementById("ttClose")?.addEventListener("click", (e) => {
+            e.stopPropagation();
+            tooltip.classList.remove("visible", "pinned");
+          });
+        });
+    }
+
+    document.addEventListener("click", () => {
+      if (tooltip.classList.contains("pinned")) {
+        tooltip.classList.remove("visible", "pinned");
+      }
+    });
 
     function updateLivePanel(data) {
       const matches = [];
-      // Coletar todos os jogos de todas as rodadas
       if (data.rounds) {
         for (const round of data.rounds) {
           for (const m of round.matches) {
@@ -780,7 +881,6 @@ function showTooltip(ev, team) {
         }
       }
 
-      // Encontrar jogo ao vivo ou mais próximo
       const now = new Date();
       let liveMatch = null;
       let nextMatch = null;
@@ -803,11 +903,9 @@ function showTooltip(ev, team) {
         }
       }
 
-      // Se não tiver ao vivo, usar o próximo
       if (!liveMatch && earliestFuture) {
         nextMatch = earliestFuture.match;
       } else if (liveMatch) {
-        // Verificar se tem próximo depois do ao vivo
         for (const m of matches) {
           const matchDate = new Date(m.date);
           if (matchDate > new Date(liveMatch.date)) {
@@ -818,7 +916,8 @@ function showTooltip(ev, team) {
         }
       }
 
-      // Atualizar painel AO VIVO
+      livePanel.classList.toggle("no-live", !liveMatch);
+
       if (liveMatch) {
         const home = liveMatch.home;
         const away = liveMatch.away;
@@ -839,20 +938,13 @@ function showTooltip(ev, team) {
         if (homeImg) homeImg.src = home.logo || '';
         if (awayImg) awayImg.src = away.logo || '';
         document.querySelector('.live-badge').textContent = status === 'FINISHED' ? '✓ ENCERRADO' : '● AO VIVO';
-      } else {
-        document.querySelector('.live-match').style.opacity = '0.5';
-        document.getElementById('liveHome').textContent = '—';
-        document.getElementById('liveAway').textContent = '—';
-        document.getElementById('liveScore').textContent = 'vs';
-        document.getElementById('liveStatus').textContent = 'AGUARDANDO';
-        document.getElementById('liveStatus').className = 'status-badge status-upcoming';
       }
 
-      // Atualizar PRÓXIMO JOGO
       if (nextMatch) {
         const home = nextMatch.home;
         const away = nextMatch.away;
         const date = new Date(nextMatch.date);
+        document.querySelector('.next-match').style.opacity = '1';
         document.getElementById('nextHome').textContent = home.name || '—';
         document.getElementById('nextAway').textContent = away.name || '—';
         document.getElementById('nextDateTime').textContent = 
@@ -871,120 +963,187 @@ function showTooltip(ev, team) {
 
     function render(data) {
       clear(svg);
+      allNodeGroups = [];
       drawBackground();
 
-      const leaves = data.leaves || [];
-      const N = leaves.length;
-      if (N === 0) {
-        statusEl.innerHTML =
-          `Ainda sem confrontos de mata-mata publicados pela API. ` +
-          `(Confira <code>/api/rounds</code> pra ver os nomes de fase disponíveis.)`;
+      const rounds = data.rounds || [];
+      if (rounds.length === 0) {
+        statusEl.innerHTML = `Ainda sem confrontos de mata-mata publicados pela API.`;
         return;
       }
 
+      // Fase inicial (oitavas de 32) - monta os nós da primeira fase
+      const firstRound = rounds[0];
+      const matches = firstRound.matches;
+      const N = matches.length;
       const step = 360 / N;
-      const branchSize = N / 8;
-      let nodes = leaves.map((team, i) => ({
-        team,
-        angle: i * step,
-        decided: true,
-        branchIdx: Math.floor(i / branchSize) % 8,
-      }));
-
-      // Desenha folhas
-      nodes.forEach((n) => {
-        teamNode(n.team, LEVEL_R[0], n.angle, BRANCH_COLORS[n.branchIdx], false, NODE_SIZE[0], 0);
+      
+      // Mapa para armazenar os nós de cada fase
+      let currentNodes = [];
+      
+      // Criar nós para a primeira fase
+      matches.forEach((match, idx) => {
+        const angle = idx * step;
+        const branchIdx = Math.floor(idx / (N / 8)) % 8;
+        
+        // Nó do time da casa
+        if (match.home && match.home.id) {
+          const homeNode = {
+            team: match.home,
+            angle: angle - step / 4,
+            branchIdx: branchIdx,
+            matchId: match.id,
+            isHome: true,
+            matchData: match
+          };
+          currentNodes.push(homeNode);
+        }
+        
+        // Nó do time visitante
+        if (match.away && match.away.id) {
+          const awayNode = {
+            team: match.away,
+            angle: angle + step / 4,
+            branchIdx: branchIdx,
+            matchId: match.id,
+            isHome: false,
+            matchData: match
+          };
+          currentNodes.push(awayNode);
+        }
       });
 
-      const rounds = data.rounds || [];
-      let level = 0;
+      // Desenhar nós da primeira fase
+      currentNodes.forEach((node) => {
+        const matchData = node.matchData;
+        const team = node.team;
+        team._matchData = {
+          opponent: node.isHome ? matchData.away : matchData.home,
+          homeName: matchData.home?.name || '—',
+          awayName: matchData.away?.name || '—',
+          score: matchData.score ? `${matchData.score.home ?? '?'} × ${matchData.score.away ?? '?'}` : '—',
+          stage: firstRound.label || 'Oitavas de 32',
+          date: new Date(matchData.date).toLocaleDateString('pt-BR'),
+          time: new Date(matchData.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}),
+          status: matchData.status || 'SCHEDULED',
+          isUpcoming: ['SCHEDULED', 'TIMED'].includes(matchData.status),
+          isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(matchData.status),
+          isFinished: matchData.status === 'FINISHED',
+          statusLabel: STATUS_LABELS[matchData.status] || matchData.status || 'EM BREVE',
+          venue: matchData.venue || 'Estádio a definir'
+        };
+        
+        teamNode(team, LEVEL_R[0], node.angle, BRANCH_COLORS[node.branchIdx], false, NODE_SIZE[0], 0);
+      });
 
-      for (let ri = 0; ri < rounds.length; ri++) {
+      // Processar as fases seguintes
+      let previousNodes = currentNodes;
+      
+      for (let ri = 1; ri < rounds.length; ri++) {
         const round = rounds[ri];
-        const r1 = LEVEL_R[level];
-        const r2 = LEVEL_R[level + 1];
+        const r1 = LEVEL_R[ri - 1];
+        const r2 = LEVEL_R[ri];
         const rMid = (r1 + r2) / 2;
         const isFinal = ri === rounds.length - 1;
-
-        const newNodes = [];
-        for (let i = 0; i < round.matches.length; i++) {
-          const m = round.matches[i];
-          const a = nodes[2 * i];
-          const b = nodes[2 * i + 1];
-          if (!a || !b) continue;
-
-          const childAngle = (a.angle + b.angle) / 2;
-          const winnerTeam = m.winnerId != null
-            ? m.home.id === m.winnerId ? m.home : m.away
+        
+        const nextNodes = [];
+        
+        // Para cada jogo da fase atual, encontrar os times que se enfrentam
+        for (const match of round.matches) {
+          // Procurar o time da casa na fase anterior
+          const homeNode = previousNodes.find(n => 
+            n.team.id === match.home?.id || 
+            n.team.code === match.home?.code
+          );
+          
+          // Procurar o time visitante na fase anterior
+          const awayNode = previousNodes.find(n => 
+            n.team.id === match.away?.id || 
+            n.team.code === match.away?.code
+          );
+          
+          if (!homeNode || !awayNode) {
+            // Se não encontrou, pode ser um time que ainda vai ser definido (TBD)
+            continue;
+          }
+          
+          const childAngle = (homeNode.angle + awayNode.angle) / 2;
+          const winnerTeam = match.winnerId != null
+            ? (match.home?.id === match.winnerId ? match.home : match.away)
             : null;
           const decided = !!winnerTeam;
-          const winnerIsHome = decided && m.home.id === m.winnerId;
-          const branchIdx = decided ? (winnerIsHome ? a.branchIdx : b.branchIdx) : a.branchIdx;
+          const winnerIsHome = decided && match.home?.id === match.winnerId;
+          const branchIdx = decided ? (winnerIsHome ? homeNode.branchIdx : awayNode.branchIdx) : homeNode.branchIdx;
           const color = decided ? BRANCH_COLORS[branchIdx] : GREY;
           
           // Guardar dados do jogo para tooltip
           const matchData = {
-  opponent: decided ? (winnerIsHome ? m.away : m.home) : null,
-  homeName: m.home?.name || '—',
-  awayName: m.away?.name || '—',
-  score: decided ? `${m.score?.home ?? '?'} × ${m.score?.away ?? '?'}` : '—',
-  stage: round.label || `Fase ${ri + 1}`,
-  date: new Date(m.date).toLocaleDateString('pt-BR'),
-  time: new Date(m.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}),
-  status: m.status || 'SCHEDULED',
-  isUpcoming: ['SCHEDULED', 'TIMED'].includes(m.status),
-  isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(m.status),
-  isFinished: m.status === 'FINISHED',
-  statusClass: m.status === 'FINISHED' ? 'finished' : 
-               (['IN_PLAY', 'LIVE', 'PAUSED'].includes(m.status) ? 'live' : 'upcoming'),
-  statusLabel: STATUS_LABELS[m.status] || m.status || 'EM BREVE',
-  venue: m.venue || 'Estádio a definir'
-};
+            opponent: decided ? (winnerIsHome ? match.away : match.home) : null,
+            homeName: match.home?.name || '—',
+            awayName: match.away?.name || '—',
+            score: decided ? `${match.score?.home ?? '?'} × ${match.score?.away ?? '?'}` : '—',
+            stage: round.label || `Fase ${ri + 1}`,
+            date: new Date(match.date).toLocaleDateString('pt-BR'),
+            time: new Date(match.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}),
+            status: match.status || 'SCHEDULED',
+            isUpcoming: ['SCHEDULED', 'TIMED'].includes(match.status),
+            isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
+            isFinished: match.status === 'FINISHED',
+            statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE',
+            venue: match.venue || 'Estádio a definir'
+          };
 
-          const glowLevel = Math.min(ri + 1, GLOW_AMOUNT.length);
-          const lineWidth = Math.min(ri + 1, LINE_WIDTH.length);
+          const glowLevel = Math.min(ri, GLOW_AMOUNT.length);
+          const lineWidth = Math.min(ri, LINE_WIDTH.length);
 
-          connector(r1, a.angle, b.angle, rMid, childAngle, r2, color, glowLevel, lineWidth);
+          // Desenhar conector
+          connector(r1, homeNode.angle, awayNode.angle, rMid, childAngle, r2, color, glowLevel, lineWidth);
 
           const teamObj = winnerTeam || { 
-            name: `${a.team?.name ?? '?'} / ${b.team?.name ?? '?'} — a definir`, 
+            name: `${homeNode.team?.name ?? '?'} / ${awayNode.team?.name ?? '?'} — a definir`, 
             logo: null,
-            _matchData: matchData
+            _matchData: matchData,
+            id: match.winnerId || null,
+            code: match.winnerId ? (winnerIsHome ? match.home?.code : match.away?.code) : null
           };
           teamObj._matchData = matchData;
 
-          newNodes.push({
+          nextNodes.push({
             team: teamObj,
             angle: childAngle,
-            decided,
-            branchIdx,
+            decided: decided,
+            branchIdx: branchIdx,
+            matchId: match.id
           });
         }
 
-        nodes = newNodes;
-        level += 1;
+        // Desenhar os nós desta fase
+        const sizeIdx = Math.min(ri, NODE_SIZE.length - 1);
+        const glowIdx = Math.min(ri, GLOW_AMOUNT.length - 1);
+        const isChampion = ri === rounds.length - 1;
 
-        // Desenha os nós
-        const isChampion = level === LEVEL_R.length - 1;
-        const sizeIdx = Math.min(level, NODE_SIZE.length - 1);
-        const glowIdx = Math.min(level, GLOW_AMOUNT.length - 1);
-
-        nodes.forEach((n, idx) => {
+        nextNodes.forEach((n, idx) => {
           const isChampionNode = isChampion && n.decided && idx === 0;
           teamNode(
-            n.team, 
-            LEVEL_R[level], 
-            n.angle, 
-            n.decided ? BRANCH_COLORS[n.branchIdx] : GREY, 
-            !n.decided, 
-            NODE_SIZE[sizeIdx], 
+            n.team,
+            LEVEL_R[ri],
+            n.angle,
+            n.decided ? BRANCH_COLORS[n.branchIdx] : GREY,
+            !n.decided,
+            NODE_SIZE[sizeIdx],
             n.decided ? glowIdx : 0,
             isChampionNode
           );
         });
+
+        previousNodes = nextNodes;
       }
 
       drawTrophy();
+
+      // Trazer nós para frente
+      allNodeGroups.forEach((g) => svg.appendChild(g));
+
       updateLivePanel(data);
 
       const ts = new Date(data.updatedAt).toLocaleString("pt-BR");
@@ -998,6 +1157,7 @@ function showTooltip(ev, team) {
         const res = await fetch("/api/bracket", { cache: "no-store" });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Erro desconhecido");
+        currentData = data;
         render(data);
       } catch (err) {
         svg.innerHTML = "";
