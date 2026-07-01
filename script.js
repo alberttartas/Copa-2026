@@ -1,5 +1,5 @@
 // ============================================================
-// BRACKET CIRCULAR – LAYOUT ABSOLUTAMENTE FIXO
+// BRACKET CIRCULAR – LAYOUT BOTTOM-UP (GEOMETRIA PERFEITA)
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -11,7 +11,6 @@ const panelEl = document.getElementById('panel');
 const statusText = document.getElementById('statusText');
 const refreshBtn = document.getElementById('refreshBtn');
 
-// ---------- GUARD ----------
 if (!svgLayer || !tooltipEl || !panelEl || !statusText) {
   console.warn('DOM incompleto, aguardando...');
 }
@@ -29,7 +28,6 @@ const state = {
 const CX = 600,
   CY = 500;
 const LEVEL_R = [420, 360, 300, 240, 180, 120];
-
 const COLORS = [
   '#e6484f', '#3ddc84', '#f0c23d', '#4ea1f7',
   '#b768e0', '#ff9f53', '#2ec4b6', '#ff6f91',
@@ -37,23 +35,61 @@ const COLORS = [
 const GREY = '#3c3c40';
 
 // ============================================================
-// LAYOUT ABSOLUTAMENTE FIXO (INDEPENDENTE DA API)
+// LAYOUT BOTTOM-UP – ÂNGULO DOS FILHOS = MÉDIA DOS PAIS
 // ============================================================
 
 function buildFixedLayout(totalLeaves) {
   const totalRounds = Math.log2(totalLeaves) + 1;
   const layout = [];
 
+  // Inicializa arrays para cada round
   for (let r = 0; r < totalRounds; r++) {
-    const count = Math.max(1, totalLeaves / Math.pow(2, r));
-    const layer = [];
+    layout.push([]);
+  }
+
+  // ---------- ROUND 0 (FOLHAS) – DISTRIBUIÇÃO UNIFORME ----------
+  const countLeaves = totalLeaves;
+  for (let i = 0; i < countLeaves; i++) {
+    const angle = (i / countLeaves) * 2 * Math.PI - Math.PI / 2;
+    const radius = LEVEL_R[0];
+
+    layout[0].push({
+      id: `r0_n${i}`,
+      round: 0,
+      index: i,
+      angle,
+      radius,
+      team: null,
+      matchId: null,
+      colorIndex: i % COLORS.length,
+      isPending: true,
+      isWinner: false,
+      x: CX + radius * Math.sin(angle),
+      y: CY - radius * Math.cos(angle),
+    });
+  }
+
+  // ---------- ROUNDS SEGUINTES – MÉDIA DOS PAIS ----------
+  for (let r = 1; r < totalRounds; r++) {
+    const prevLayer = layout[r - 1];
+    const count = prevLayer.length / 2;
+    const radius = LEVEL_R[r] || LEVEL_R[LEVEL_R.length - 1];
 
     for (let i = 0; i < count; i++) {
-      const angle = (i / count) * 2 * Math.PI - Math.PI / 2;
-      const radius = LEVEL_R[r] || LEVEL_R[LEVEL_R.length - 1];
+      const parent1 = prevLayer[i * 2];
+      const parent2 = prevLayer[i * 2 + 1];
 
-      layer.push({
-        id: `r${r}_n${i}`, // SLOT FIXO REAL
+      // 🔥 O ângulo do filho é a média exata dos dois pais
+      let angle = (parent1.angle + parent2.angle) / 2;
+
+      // Ajuste para evitar wrap-around (ex: 350° e 10° -> 0°)
+      let diff = parent2.angle - parent1.angle;
+      if (diff > Math.PI) diff -= 2 * Math.PI;
+      if (diff < -Math.PI) diff += 2 * Math.PI;
+      angle = parent1.angle + diff / 2;
+
+      layout[r].push({
+        id: `r${r}_n${i}`,
         round: r,
         index: i,
         angle,
@@ -63,24 +99,20 @@ function buildFixedLayout(totalLeaves) {
         colorIndex: i % COLORS.length,
         isPending: true,
         isWinner: false,
-        // Posições pré-calculadas
         x: CX + radius * Math.sin(angle),
         y: CY - radius * Math.cos(angle),
       });
     }
-
-    layout.push(layer);
   }
 
   return layout;
 }
 
 // ============================================================
-// MAPEAMENTO: API → SLOTS (POR fixtureId, NÃO POR POSIÇÃO)
+// MAPEAMENTO API → SLOTS (POR fixtureId)
 // ============================================================
 
 function mapApiToSlots(leaves, rounds) {
-  // Usar número fixo de leaves para o layout
   const totalLeaves = leaves.length || 32;
   const layout = buildFixedLayout(totalLeaves);
 
@@ -92,17 +124,7 @@ function mapApiToSlots(leaves, rounds) {
     }
   }
 
-  // ---------- MAPA DE MATCHES POR fixtureId ----------
-  const matchMap = new Map();
-  for (const round of rounds) {
-    for (const match of round.matches || []) {
-      matchMap.set(match.fixtureId, match);
-    }
-  }
-
   // ---------- ROUND 0: FOLHAS ----------
-  // Mapear cada leaf para um slot fixo (usando o índice da API)
-  // Mas a posição é fixa! O índice da API não define a posição.
   const leafSlots = layout[0] || [];
   for (let i = 0; i < leaves.length && i < leafSlots.length; i++) {
     const slot = leafSlots[i];
@@ -111,31 +133,19 @@ function mapApiToSlots(leaves, rounds) {
     slot.isPending = false;
     slot.isWinner = false;
     slot.matchId = null;
+    slot.colorIndex = i % COLORS.length;
   }
 
-  // ---------- ROUNDS SEGUINTES (POR fixtureId) ----------
-  // 🔥 CRÍTICO: usamos fixtureId para encontrar o slot correto
-  // NÃO usamos índice do match para posição!
-
-  // Primeiro, identificar qual slot cada match ocupa
-  // Para cada round, os slots são fixos. Precisamos saber qual slot
-  // corresponde a cada match da API.
-
-  // Estratégia: os matches da API vêm em ordem, mas a posição é fixa.
-  // Cada match da API tem um fixtureId. Vamos associar cada match a um slot
-  // baseado na ORDEM da API (porque a API já vem na ordem correta).
-  // MAS a posição é definida pelo slot, não pelo match.
-
+  // ---------- ROUNDS SEGUINTES ----------
   for (let ri = 0; ri < rounds.length; ri++) {
     const round = rounds[ri];
     const matches = round.matches || [];
     const nextLayer = layout[ri + 1] || [];
 
-    // Para cada match da API, atribuir ao próximo slot disponível
-    // A posição é fixa, a ordem da API só define qual time vai em qual slot
+    // 🔥 Atribuir cada match ao slot correspondente (por posição, mas a posição é fixa)
     for (let i = 0; i < matches.length && i < nextLayer.length; i++) {
       const match = matches[i];
-      const slot = nextLayer[i]; // POSIÇÃO FIXA, NÃO DEPENDE DO MATCH
+      const slot = nextLayer[i]; // POSIÇÃO FIXA (não depende do match)
 
       // Determinar vencedor
       let winner = null;
@@ -170,7 +180,7 @@ function mapApiToSlots(leaves, rounds) {
 }
 
 // ============================================================
-// RENDER SVG (LAYOUT FIXO)
+// RENDER SVG
 // ============================================================
 
 function render() {
@@ -178,20 +188,17 @@ function render() {
   clearSVG();
 
   const { rounds, leaves } = state;
-
-  // Se não houver dados, usar layout vazio com 32 slots
   const totalLeaves = leaves.length || 32;
+
+  // Layout fixo
   const layout = (leaves.length && rounds.length)
     ? mapApiToSlots(leaves, rounds)
     : buildFixedLayout(totalLeaves);
 
-  // ---------- FUNDO ----------
   drawBackground();
-
-  // ---------- CONEXÕES FIXAS ----------
   drawFixedConnections(layout);
 
-  // ---------- NÓS ----------
+  // Desenhar nós
   for (const layer of layout) {
     for (const slot of layer) {
       const team = slot.team;
@@ -211,10 +218,8 @@ function render() {
     }
   }
 
-  // ---------- TAÇA ----------
   drawTrophy();
 
-  // ---------- STATUS ----------
   if (statusText) {
     const ts = state.updatedAt
       ? new Date(state.updatedAt).toLocaleString('pt-BR')
@@ -224,7 +229,7 @@ function render() {
 }
 
 // ============================================================
-// CONEXÕES FIXAS (GEOMETRIA PURA)
+// CONEXÕES FIXAS (USANDO SLOTS)
 // ============================================================
 
 function drawFixedConnections(layout) {
@@ -304,7 +309,7 @@ function drawBezierConnection(r1, angleA, r2, angleB, rMid, childAngle, rChild, 
 }
 
 // ============================================================
-// NÓ (TIME) – ESTADO VARIÁVEL, POSIÇÃO FIXA
+// NÓ (TIME) – POSIÇÃO FIXA, ESTADO VARIÁVEL
 // ============================================================
 
 function drawNode(team, r, a, color, pending, matchId, isWinner) {
@@ -528,4 +533,4 @@ if (refreshBtn) {
 load();
 setInterval(load, 90000);
 
-console.log('🏆 Bracket circular com layout fixo (slots por ID) iniciado.');
+console.log('🏆 Bracket circular com layout bottom-up iniciado.');
