@@ -1,19 +1,15 @@
 // ============================================================
-// BRACKET CIRCULAR – ACERTADO VIA ESTRUTURA DE CONFRONTOS REAIS
+// BRACKET CIRCULAR – GEOMETRIA, POSIÇÕES FIÉIS E ESTILO SÓBRIO
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
 
-// ---------- DOM ----------
+// ---------- DOM REFS ----------
 const svgLayer = document.getElementById('bracket-layer');
 const tooltipEl = document.getElementById('tooltip');
 const panelEl = document.getElementById('panel');
 const statusText = document.getElementById('statusText');
 const refreshBtn = document.getElementById('refreshBtn');
-
-if (!svgLayer || !tooltipEl || !panelEl || !statusText) {
-  console.warn('DOM incompleto, aguardando...');
-}
 
 // ---------- STATE ----------
 const state = {
@@ -24,59 +20,72 @@ const state = {
   loading: false,
 };
 
-// ---------- CONSTANTS ----------
+// ---------- GEOMETRIC CONSTANTS ----------
 const CX = 600, CY = 500;
 const LEVEL_R = [420, 360, 300, 240, 180, 120];
-const BASE_LINE_COLOR = '#2e2e33'; 
+
+// Cores fieis ao design original (Linha inativa/eliminada em cinza escuro)
+const COLOR_INACTIVE_LINE = '#313136';
+const COLOR_INACTIVE_NODE = '#1a1a1f';
 
 // ============================================================
-// MAPEA E MONTA A ÁRVORE DINAMICAMENTE (EVITA ERRO DE POSIÇÃO)
+// MAPEAMENTO FIXO ESTREITO DA IMAGEM DE REFERÊNCIA (32 SLOTS)
+// Sequência exata anti-horária começando pelo topo/esquerda
+// ============================================================
+const FIXED_POSITION_MAP = [
+  // --- HEMISFÉRIO ESQUERDO (Índices 0 a 15) ---
+  { code: 'BRA', side: 'left' }, { code: 'JPN', side: 'left' },
+  { code: 'GER', side: 'left' }, { code: 'PAR', side: 'left' },
+  { code: 'FRA', side: 'left' }, { code: 'RSA', side: 'left' },
+  { code: 'CAN', side: 'left' }, { code: 'MAR', side: 'left' },
+  { code: 'POR', side: 'left' }, { code: 'CRO', side: 'left' },
+  { code: 'ESP', side: 'left' }, { code: 'AUT', side: 'left' },
+  { code: 'USA', side: 'left' }, { code: 'BIH', side: 'left' },
+  { code: 'BEL', side: 'left' }, { code: 'SEN', side: 'left' },
+
+  // --- HEMISFÉRIO DIREITO (Índices 16 a 31) ---
+  { code: 'GHA', side: 'right' }, { code: 'COL', side: 'right' },
+  { code: 'ALG', side: 'right' }, { code: 'SUI', side: 'right' },
+  { code: 'EGY', side: 'right' }, { code: 'IRQ', side: 'right' },
+  { code: 'AUS', side: 'right' }, { code: 'CPV', side: 'right' },
+  { code: 'ARG', side: 'right' }, { code: 'ITA', side: 'right' },
+  { code: 'ENG', side: 'right' }, { code: 'ECU', side: 'right' },
+  { code: 'MEX', side: 'right' }, { code: 'NOR', side: 'right' },
+  { code: 'THA', side: 'right' }, { code: 'CIV', side: 'right' }
+];
+
+// Mapeamento de Cores Temáticas Oficiais por Seleção para as Linhas Ativas
+const TEAM_COLORS = {
+  BRA: '#e5c158', FRA: '#2b52a1', CAN: '#c8232b', MAR: '#177d43',
+  NOR: '#ba2031', MEX: '#155c37', ENG: '#ffffff', ARG: '#74acdf',
+  GER: '#ffffff', POR: '#b81920', ESP: '#dd1a22', USA: '#0a3161'
+};
+
+// ============================================================
+// CONSTRUÇÃO DA ÁRVORE GEOMÉTRICA REORGANIZADA
 // ============================================================
 
-function mapApiToDynamicLayout() {
-  const totalLeaves = 32; // Copa do Mundo 2026 (Fase Final com 32 ou adaptável)
+function buildFixedLayout() {
+  const totalLeaves = 32;
   const totalRounds = Math.log2(totalLeaves) + 1;
-  const layout = [];
-
-  for (let r = 0; r < totalRounds; r++) {
-    layout.push([]);
-  }
-
-  // 1. Coleta os confrontos do primeiro round da API para ordenar as folhas corretamente
-  const round0Matches = state.rounds[0]?.matches || [];
-  const orderedTeams = [];
-  const matchIdMap = [];
-
-  // Preenche a lista garantindo que Home e Away do mesmo confronto fiquem juntos (vizinhos de array)
-  for (let i = 0; i < totalLeaves / 2; i++) {
-    const match = round0Matches[i];
-    if (match) {
-      orderedTeams.push(match.home || { code: 'TBD', name: 'TBD' });
-      orderedTeams.push(match.away || { code: 'TBD', name: 'TBD' });
-      matchIdMap.push(match.fixtureId);
-      matchIdMap.push(match.fixtureId);
-    } else {
-      orderedTeams.push({ code: 'TBD', name: 'TBD' });
-      orderedTeams.push({ code: 'TBD', name: 'TBD' });
-      matchIdMap.push(null);
-      matchIdMap.push(null);
-    }
-  }
+  const layout = Array.from({ length: totalRounds }, () => []);
 
   const half = totalLeaves / 2;
 
-  // 2. Distribui geometricamente no círculo (Esquerda vs Direita)
+  // Geração do Round 0 com ângulos corrigidos para casar com a imagem
   for (let i = 0; i < totalLeaves; i++) {
     let angle;
-    if (i < half) {
-      // Hemisfério Esquerdo
+    const meta = FIXED_POSITION_MAP[i];
+
+    if (meta.side === 'left') {
+      // Distribui os 16 nós da esquerda do topo até a base inferior esquerda
       const percent = i / (half - 1);
-      angle = Math.PI + (Math.PI / 1.35) * (percent - 0.5);
+      angle = Math.PI + (Math.PI / 1.15) * (percent - 0.5);
     } else {
-      // Hemisfério Direito
+      // Distribui os 16 nós da direita da base inferior direita até o topo direito
       const idx = i - half;
       const percent = idx / (half - 1);
-      angle = (Math.PI / 1.35) * (0.5 - percent);
+      angle = (Math.PI / 1.15) * (0.5 - percent);
     }
 
     layout[0].push({
@@ -85,53 +94,25 @@ function mapApiToDynamicLayout() {
       index: i,
       angle,
       radius: LEVEL_R[0],
-      team: orderedTeams[i],
-      matchId: matchIdMap[i],
-      isPending: orderedTeams[i].code === 'TBD',
+      team: { code: meta.code, name: meta.code },
+      matchId: null,
+      isEliminated: false,
       isWinner: false,
       x: CX + LEVEL_R[0] * Math.sin(angle),
       y: CY - LEVEL_R[0] * Math.cos(angle),
     });
   }
 
-  // 3. Monta as camadas internas calculando os vencedores pelo ID e histórico
+  // Geração das camadas internas baseadas na árvore pura
   for (let r = 1; r < totalRounds; r++) {
     const prevLayer = layout[r - 1];
     const count = prevLayer.length / 2;
     const radius = LEVEL_R[r] || LEVEL_R[LEVEL_R.length - 1];
-    const currentRoundMatches = state.rounds[r]?.matches || [];
 
     for (let i = 0; i < count; i++) {
-      const pai1 = prevLayer[i * 2];
-      const pai2 = prevLayer[i * 2 + 1];
-      const angle = (pai1.angle + pai2.angle) / 2;
-
-      // Busca a partida que contém um dos times que veio da camada anterior
-      const match = currentRoundMatches.find(m => 
-        (pai1.team?.id && (m.home?.id === pai1.team.id || m.away?.id === pai1.team.id)) ||
-        (pai2.team?.id && (m.home?.id === pai2.team.id || m.away?.id === pai2.team.id))
-      ) || currentRoundMatches[i];
-
-      let winner = null;
-      let decided = false;
-
-      if (match) {
-        if (match.winnerId != null) {
-          decided = true;
-          winner = match.home?.id === match.winnerId ? match.home : match.away;
-        } else if (match.status === 'FINISHED' && match.score) {
-          const h = match.score.home ?? 0;
-          const a = match.score.away ?? 0;
-          if (h > a) { decided = true; winner = match.home; } 
-          else if (a > h) { decided = true; winner = match.away; }
-        }
-      }
-
-      // Define se o pai foi o vencedor para destacar a linha dourada
-      if (decided && winner) {
-        if (pai1.team && pai1.team.id === winner.id) pai1.isWinner = true;
-        if (pai2.team && pai2.team.id === winner.id) pai2.isWinner = true;
-      }
+      const parent1 = prevLayer[i * 2];
+      const parent2 = prevLayer[i * 2 + 1];
+      const angle = (parent1.angle + parent2.angle) / 2;
 
       layout[r].push({
         id: `r${r}_n${i}`,
@@ -139,10 +120,10 @@ function mapApiToDynamicLayout() {
         index: i,
         angle,
         radius,
-        team: winner,
-        matchId: match ? match.fixtureId : null,
-        isPending: !decided,
-        isWinner: false, 
+        team: null,
+        matchId: null,
+        isEliminated: false,
+        isWinner: false,
         x: CX + radius * Math.sin(angle),
         y: CY - radius * Math.cos(angle),
       });
@@ -153,15 +134,91 @@ function mapApiToDynamicLayout() {
 }
 
 // ============================================================
-// SVG RENDERING
+// CORRELAÇÃO DE DADOS DA API COM AS POSIÇÕES DA IMAGEM
+// ============================================================
+
+function mapApiToSlots() {
+  const layout = buildFixedLayout();
+  const round0Matches = state.rounds[0]?.matches || [];
+
+  // 1. Vincula as partidas correspondentes aos slots fixos do Round 0
+  for (let i = 0; i < layout[0].length; i++) {
+    const slot = layout[0][i];
+    
+    // Procura na API a partida onde este país do mapa estrito está jogando
+    const match = round0Matches.find(m => 
+      m.home?.code?.toUpperCase() === slot.team.code || 
+      m.away?.code?.toUpperCase() === slot.team.code
+    );
+
+    if (match) {
+      const isHome = match.home?.code?.toUpperCase() === slot.team.code;
+      const actualTeam = isHome ? match.home : match.away;
+      const opponent = isHome ? match.away : match.home;
+
+      slot.team = actualTeam;
+      slot.matchId = match.fixtureId;
+
+      // Define se foi eliminado logo no Round 1
+      if (match.winnerId && match.winnerId !== actualTeam.id) {
+        slot.isEliminated = true;
+      }
+    }
+  }
+
+  // 2. Resolve as subidas dos nós internos verificando os vencedores reais
+  for (let r = 1; r < layout.length; r++) {
+    const currentLayer = layout[r];
+    const prevLayer = layout[r - 1];
+    const currentRoundMatches = state.rounds[r]?.matches || [];
+
+    for (let i = 0; i < currentLayer.length; i++) {
+      const slotFilho = currentLayer[i];
+      const pai1 = prevLayer[i * 2];
+      const pai2 = prevLayer[i * 2 + 1];
+
+      // Localiza o confronto correspondente na API
+      const match = currentRoundMatches.find(m => 
+        (pai1.team?.id && (m.home?.id === pai1.team.id || m.away?.id === pai1.team.id)) ||
+        (pai2.team?.id && (m.home?.id === pai2.team.id || m.away?.id === pai2.team.id))
+      );
+
+      if (match) {
+        slotFilho.matchId = match.fixtureId;
+        let winner = null;
+
+        if (match.winnerId != null) {
+          winner = match.home?.id === match.winnerId ? match.home : match.away;
+        }
+
+        if (winner) {
+          slotFilho.team = winner;
+          
+          // Marca quem avançou na árvore para fins estéticos de destaque
+          if (pai1.team && pai1.team.id === winner.id) { pai1.isWinner = true; pai2.isEliminated = true; }
+          if (pai2.team && pai2.team.id === winner.id) { pai2.isWinner = true; pai1.isEliminated = true; }
+        }
+        
+        // Se a partida superior já acabou e esse slot não subiu, ele foi eliminado
+        if (match.status === 'FINISHED' && (!winner || slotFilho.team?.id !== winner.id)) {
+          slotFilho.isEliminated = true;
+        }
+      }
+    }
+  }
+
+  return layout;
+}
+
+// ============================================================
+// SVG CONNECTIONS AND RENDER (ESTILO SÓBRIO)
 // ============================================================
 
 function render() {
   if (!svgLayer) return;
   clearSVG();
 
-  // Gera o layout dinâmico baseado na árvore de confrontos reais
-  const layout = mapApiToDynamicLayout();
+  const layout = mapApiToSlots();
 
   drawBackground();
   drawFixedConnections(layout);
@@ -173,16 +230,7 @@ function render() {
   }
 
   drawTrophy();
-
-  if (statusText) {
-    const ts = state.updatedAt ? new Date(state.updatedAt).toLocaleString('pt-BR') : 'agora';
-    statusText.textContent = `✅ Atualizado ${ts}`;
-  }
 }
-
-// ============================================================
-// CONEXÕES MONOCROMÁTICAS PREMIUM
-// ============================================================
 
 function drawFixedConnections(layout) {
   for (let r = 0; r < layout.length - 1; r++) {
@@ -199,16 +247,16 @@ function drawFixedConnections(layout) {
 
       if (!parent1 || !parent2 || !child) continue;
 
-      // Se o pai venceu e avançou para o filho, destaca a linha dele em dourado
-      const color1 = parent1.isWinner ? '#cda036' : BASE_LINE_COLOR;
-      const width1 = parent1.isWinner ? 2.0 : 1.2;
+      // Aplica lógica de cor: se o pai está eliminado, o fio vira cinza fosco desbotado
+      const color1 = (parent1.isWinner && !parent1.isEliminated) ? (TEAM_COLORS[parent1.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
+      const width1 = (parent1.isWinner && !parent1.isEliminated) ? 2.2 : 1.2;
 
-      const color2 = parent2.isWinner ? '#cda036' : BASE_LINE_COLOR;
-      const width2 = parent2.isWinner ? 2.0 : 1.2;
+      const color2 = (parent2.isWinner && !parent2.isEliminated) ? (TEAM_COLORS[parent2.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
+      const width2 = (parent2.isWinner && !parent2.isEliminated) ? 2.2 : 1.2;
 
-      // Cor do tronco central comum até o próximo círculo
-      const jointColor = (!child.isPending && child.team) ? '#cda036' : BASE_LINE_COLOR;
-      const jointWidth = (!child.isPending && child.team) ? 2.0 : 1.2;
+      // Tronco unificado de avanço
+      const jointColor = (child.team && !child.isEliminated) ? (TEAM_COLORS[child.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
+      const jointWidth = (child.team && !child.isEliminated) ? 2.2 : 1.2;
 
       drawSeparatedBezierConnection(
         parent1.radius, parent1.angle, color1, width1,
@@ -228,31 +276,30 @@ function drawSeparatedBezierConnection(r1, angleA, col1, w1, r2, angleB, col2, w
   const midX = (x1 + x2) / 2;
   const midY = (y1 + y2) / 2;
 
-  // Linhas independentes para que o caminho do perdedor continue cinza e o do vencedor fique dourado
   svgLayer.appendChild(elNS('path', { d: `M${x1},${y1} Q${midX},${midY} ${cx},${cy}`, stroke: col1, fill: 'none', 'stroke-width': w1 }));
   svgLayer.appendChild(elNS('path', { d: `M${cx},${cy} Q${midX},${midY} ${x2},${y2}`, stroke: col2, fill: 'none', 'stroke-width': w2 }));
   svgLayer.appendChild(elNS('path', { d: `M${cx},${cy} L${cx2},${cy2}`, stroke: colJ, fill: 'none', 'stroke-width': wJ }));
 }
 
 // ============================================================
-// DESENHO DOS NÓS + CORREÇÃO DOS ESCUDOS EXTERNOS (UPPERCASE)
+// DESIGN DOS NÓS COM PRESERVAÇÃO E FILTRO DE ELIMINADOS
 // ============================================================
 
 function drawNode(slot) {
-  const { team, radius, angle, round, matchId, isWinner, isPending } = slot;
+  const { team, radius, angle, round, matchId, isWinner, isEliminated } = slot;
   if (!isFinite(angle)) return;
 
   const [x, y] = polar(radius, angle);
   const g = elNS('g', { 'data-match-id': matchId || '', style: 'cursor: pointer;' });
 
-  const nodeRadius = isWinner ? 17 : 14;
+  const nodeRadius = isWinner && !isEliminated ? 17 : 14;
 
-  g.appendChild(elNS('circle', {
-    cx: x, cy: y, r: nodeRadius,
-    fill: isPending ? '#111113' : '#050505',
-    stroke: isWinner ? '#d9a531' : '#333338',
-    'stroke-width': isWinner ? 2.5 : 1,
-  }));
+  // Filtro de opacidade e saturação para times eliminados (igualmente cinzas na imagem de referência)
+  const nodeFill = isEliminated ? COLOR_INACTIVE_NODE : '#070709';
+  const nodeStroke = isEliminated ? '#242428' : (isWinner ? '#d9a531' : '#44444a');
+  const nodeStrokeWidth = isWinner && !isEliminated ? 2.5 : 1;
+
+  g.appendChild(elNS('circle', { cx: x, cy: y, r: nodeRadius, fill: nodeFill, stroke: nodeStroke, 'stroke-width': nodeStrokeWidth }));
 
   if (team && team.code !== 'TBD') {
     const countryCodeUpper = team.code.toUpperCase();
@@ -261,10 +308,10 @@ function drawNode(slot) {
     const isoMap = { bra: 'br', fra: 'fr', ger: 'de', esp: 'es', arg: 'ar', can: 'ca', mex: 'mx', usa: 'us', eng: 'gb-eng', nor: 'no', por: 'pt', ita: 'it', jpn: 'jp', mar: 'ma' };
     const flag2Letter = isoMap[countryCodeLower] || countryCodeLower.substring(0, 2);
     
-    const apiFlagUrl = team.flag || `https://flagcdn.com/${flag2Letter}.svg`;
+    const apiFlagUrl = `https://flagcdn.com/${flag2Letter}.svg`;
     const localShieldUrl = `assets/img/federations/${countryCodeUpper}.svg`;
 
-    // Recorte circular perfeito da bandeira
+    // Recorte circular perfeito
     const clipId = `clip-r${round}-n${slot.index}-${countryCodeLower}`;
     const clipPath = elNS('clipPath', { id: clipId });
     clipPath.appendChild(elNS('circle', { cx: x, cy: y, r: nodeRadius - 0.5 }));
@@ -275,11 +322,13 @@ function drawNode(slot) {
       width: nodeRadius * 2, height: nodeRadius * 2,
       href: apiFlagUrl,
       preserveAspectRatio: 'xMidYMid slice',
-      'clip-path': `url(#${clipId})`
+      'clip-path': `url(#${clipId})`,
+      // Deixa a bandeira em preto e branco se tiver sido eliminada
+      style: isEliminated ? 'filter: grayscale(1) opacity(0.25);' : ''
     });
     g.appendChild(imgFlag);
 
-    // ESCUDOS EXTERNOS (Apenas Round 0)
+    // ESCUDOS EXTERNOS (Apenas no Round Inicial de Entrada)
     if (round === 0) {
       const shieldDistance = radius + 28; 
       const [sx, sy] = polar(shieldDistance, angle);
@@ -291,6 +340,7 @@ function drawNode(slot) {
         width: shieldSize,
         height: shieldSize,
         href: localShieldUrl, 
+        style: isEliminated ? 'filter: grayscale(1) opacity(0.2);' : ''
       });
 
       imgFederation.onerror = () => imgFederation.remove();
@@ -299,16 +349,16 @@ function drawNode(slot) {
       const [lx, ly] = polar(radius + 14, angle);
       svgLayer.appendChild(elNS('line', {
         x1: lx, y1: ly, x2: sx, y2: sy,
-        stroke: '#2a2a2e', 'stroke-width': 1, 'stroke-dasharray': '2,2'
+        stroke: isEliminated ? '#222226' : '#3a3a42', 'stroke-width': 1, 'stroke-dasharray': '2,2'
       }));
     }
-
   } else {
-    const t = elNS('text', { x, y: y + 3, 'text-anchor': 'middle', 'font-size': 8, fill: '#3a3a40', 'font-weight': 'bold', 'font-family': 'sans-serif' });
+    const t = elNS('text', { x, y: y + 3, 'text-anchor': 'middle', 'font-size': 8, fill: '#333338', 'font-weight': 'bold', 'font-family': 'sans-serif' });
     t.textContent = 'TBD';
     g.appendChild(t);
   }
 
+  // Interação de tooltips
   g.onmouseenter = (e) => {
     const rect = svgLayer.getBoundingClientRect();
     state.hover = { x: e.clientX - rect.left, y: e.clientY - rect.top, matchId };
@@ -320,7 +370,7 @@ function drawNode(slot) {
 }
 
 // ============================================================
-// AUXILIARES STANDARD
+// BASE E AUXILIARES STANDARD
 // ============================================================
 
 function polar(r, a) {
@@ -340,21 +390,21 @@ function clearSVG() {
 function drawBackground() {
   const defs = elNS('defs', { id: 'defs' });
   const grad = elNS('radialGradient', { id: 'bgGlow', cx: '50%', cy: '50%', r: '55%' });
-  grad.appendChild(elNS('stop', { offset: '0%', 'stop-color': '#1d170b' }));
-  grad.appendChild(elNS('stop', { offset: '65%', 'stop-color': '#09090b' }));
-  grad.appendChild(elNS('stop', { offset: '100%', 'stop-color': '#040405' }));
+  grad.appendChild(elNS('stop', { offset: '0%', 'stop-color': '#16130d' }));
+  grad.appendChild(elNS('stop', { offset: '70%', 'stop-color': '#08080a' }));
+  grad.appendChild(elNS('stop', { offset: '100%', 'stop-color': '#030304' }));
   defs.appendChild(grad);
   svgLayer.appendChild(defs);
   svgLayer.appendChild(elNS('rect', { x: 0, y: 0, width: 1200, height: 1000, fill: 'url(#bgGlow)' }));
 
   LEVEL_R.forEach((r) => {
-    svgLayer.appendChild(elNS('circle', { cx: CX, cy: CY, r, fill: 'none', stroke: '#111114', 'stroke-width': 1 }));
+    svgLayer.appendChild(elNS('circle', { cx: CX, cy: CY, r, fill: 'none', stroke: '#101013', 'stroke-width': 1 }));
   });
 }
 
 function drawTrophy() {
   const g = elNS('g');
-  g.appendChild(elNS('circle', { cx: CX, cy: CY, r: 52, fill: '#040405', stroke: '#221a0b', 'stroke-width': 1.5 }));
+  g.appendChild(elNS('circle', { cx: CX, cy: CY, r: 52, fill: '#030304', stroke: '#1f1a0e', 'stroke-width': 1.5 }));
   const t = elNS('text', { x: CX, y: CY + 12, 'text-anchor': 'middle', 'font-size': 42, fill: '#d9a531' });
   t.textContent = '🏆';
   g.appendChild(t);
