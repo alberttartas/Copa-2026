@@ -163,12 +163,15 @@ function render() {
 
     const currentNodes = [];
 
+    // 🔥 PERFORMANCE FIX: Cache por ID (O(n) em vez de O(n²))
+    const prevMap = new Map(prevNodes.map(p => [p.team?.id, p]));
+
     for (let i = 0; i < matches.length; i++) {
       const match = matches[i];
 
-      // Encontrar os pais (home e away) na fase anterior
-      const homeParent = prevNodes.find((n) => n.team?.id === match.home?.id);
-      const awayParent = prevNodes.find((n) => n.team?.id === match.away?.id);
+      // Busca O(1) por ID em vez de O(n) com find()
+      const homeParent = prevMap.get(match.home?.id);
+      const awayParent = prevMap.get(match.away?.id);
 
       if (!homeParent || !awayParent) continue;
 
@@ -353,7 +356,7 @@ function drawNode(team, r, a, color, pending, matchId) {
 }
 
 // ============================================================
-// UI (TOOLTIP + PANEL)
+// UI (TOOLTIP + PANEL) – CORRIGIDO COM CONTEÚDO REAL
 // ============================================================
 function renderUI() {
   if (!tooltipEl || !panelEl) return;
@@ -381,9 +384,13 @@ function renderUI() {
 
   const home = match.home?.name || 'TBD';
   const away = match.away?.name || 'TBD';
+  const homeCode = match.home?.code || 'TBD';
+  const awayCode = match.away?.code || 'TBD';
+
   const score = match.status === 'FINISHED'
     ? `${match.score?.home ?? 0} – ${match.score?.away ?? 0}`
-    : match.isLive ? 'AO VIVO' : 'vs';
+    : match.isLive ? 'AO VIVO' : 'VS';
+
   const stage = match.stage || 'Fase eliminatória';
   const date = match.date ? new Date(match.date).toLocaleDateString('pt-BR') : '--/--';
   const time = match.date ? new Date(match.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
