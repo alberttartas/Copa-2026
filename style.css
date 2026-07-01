@@ -17,7 +17,64 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     min-height: 100vh;
   }
+/* ===== PANEL (informações do match) ===== */
+#panel {
+  position: fixed;
+  top: 80px;
+  right: 24px;
+  width: 260px;
+  min-height: 80px;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 14px 18px;
+  color: #e9e6df;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  line-height: 1.5;
+}
 
+#panel.visible {
+  opacity: 1;
+}
+
+#panel .match-title {
+  font-weight: 600;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+#panel .match-score {
+  color: #d9a531;
+  font-weight: 700;
+  font-size: 18px;
+  margin: 4px 0;
+}
+
+#panel .match-detail {
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+#panel .match-detail.live {
+  color: #ff3b30;
+  font-weight: 600;
+  animation: pulse 1s infinite;
+}
+
+#panel .match-detail .flag {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  vertical-align: middle;
+  margin-right: 4px;
+}
 header {position: sticky;top: 0;z-index: 10;backdrop-filter: blur(20px);-webkit-backdrop-filter: blur(20px);background: var(--glass);border-bottom: 1px solid rgba(255,255,255,0.05);padding: 12px 16px;text-align: center;}header h1 {margin: 0;font-size: 18px;letter-spacing: 0.12em;text-transform: uppercase;color: var(--gold);font-weight: 600;}header p {margin: 4px 0 0;font-size: 11px;color: var(--muted);}
 
 #livePanel {max-width: 880px;margin: 12px auto;padding: 12px 20px;background: var(--glass);backdrop-filter: blur(20px);-webkit-backdrop-filter: blur(20px);border-radius: 12px;border: 1px solid rgba(255,255,255,0.06);display: grid;grid-template-columns: 1fr 1fr;gap: 20px;font-size: 13px;transition: grid-template-columns 0.2s;}#livePanel.no-live {grid-template-columns: 1fr;}#livePanel.no-live .live-match {display: none;}#livePanel.no-live .next-match {justify-content: center;}#livePanel .live-match {display: flex;align-items: center;gap: 12px;flex-wrap: wrap;}#livePanel .live-badge {color: #ff3b30;font-weight: 700;font-size: 12px;letter-spacing: 0.05em;animation: pulse 1.5s ease-in-out infinite;}@keyframes pulse {0%, 100% { opacity: 1; }50% { opacity: 0.3; }}#livePanel .match-teams {display: flex;align-items: center;gap: 8px;font-weight: 600;}#livePanel .match-teams img {width: 24px;height: 24px;object-fit: contain;border-radius: 50%;}#livePanel .match-score {font-weight: 700;font-size: 18px;color: var(--gold);padding: 0 8px;}#livePanel .match-time {color: var(--muted);font-size: 12px;}#livePanel .next-match {display: flex;align-items: center;gap: 16px;justify-content: flex-end;flex-wrap: wrap;}#livePanel .next-badge {color: var(--gold);font-weight: 600;font-size: 11px;letter-spacing: 0.08em;text-transform: uppercase;}#livePanel .next-info {display: flex;align-items: center;gap: 12px;}#livePanel .next-info .teams {display: flex;align-items: center;gap: 6px;}#livePanel .next-info img {width: 20px;height: 20px;object-fit: contain;border-radius: 50%;}#livePanel .next-info .date-time {color: var(--muted);font-size: 12px;}#livePanel .status-badge {padding: 2px 10px;border-radius: 12px;font-size: 10px;font-weight: 600;text-transform: uppercase;}.status-live { background: #ff3b30; color: #fff; }.status-finished { background: #34c759; color: #fff; }.status-upcoming { background: #ff9500; color: #fff; }
