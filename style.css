@@ -37,13 +37,6 @@ body {
   cursor: grabbing;
 }
 
-/* ===== UI LAYER (sobreposto) ===== */
-#tooltip,
-#panel {
-  pointer-events: none;
-  z-index: 10;
-}
-
 /* ===== TOOLTIP ===== */
 #tooltip {
   position: absolute;
@@ -55,6 +48,7 @@ body {
   font-size: 13px;
   color: #e9e6df;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
   transform: translate3d(0, 0, 0);
   will-change: transform, opacity;
   transition: opacity 0.15s ease;
@@ -63,6 +57,7 @@ body {
   max-width: 280px;
   overflow: hidden;
   text-overflow: ellipsis;
+  z-index: 10;
 }
 #tooltip.visible {
   opacity: 1;
@@ -78,7 +73,7 @@ body {
   font-size: 11px;
   margin-top: 4px;
 }
-#tooltip .live {
+#tooltip .detail.live {
   color: #ff3b30;
   font-weight: 600;
   animation: pulse 1s infinite;
@@ -164,11 +159,6 @@ body {
 
 /* ===== ANIMAÇÕES ===== */
 @keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.3;
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
