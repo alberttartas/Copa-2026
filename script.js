@@ -1,5 +1,5 @@
 // ============================================================
-// BRACKET CIRCULAR – COPA DO MUNDO 2026 (RECONEXÃO TOTAL)
+// BRACKET CIRCULAR – COPA DO MUNDO 2026 (CORREÇÃO DE SUBIDA E CLONES)
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -27,16 +27,14 @@ const LEVEL_R = [420, 360, 300, 240, 180, 120];
 const COLOR_INACTIVE_LINE = '#26262b';
 const COLOR_INACTIVE_NODE = '#111113';
 
-// Cores ativas oficiais extraídas diretamente do poster para realce
+// Cores ativas oficiais para destaque nos caminhos de vitória
 const TEAM_COLORS = {
   BRA: '#cc9a18', FRA: '#1e4391', CAN: '#b51219', MAR: '#0d6130',
   NOR: '#a61423', MEX: '#0b4728', ENG: '#d1d1d1', ARG: '#5b96cb',
   GER: '#d1d1d1', POR: '#991116', ESP: '#bd1117', USA: '#042247'
 };
 
-// ============================================================
-// MAPEAMENTO GEOMÉTRICO (PRESERVA A ORDEM DA API)
-// ============================================================
+// Mapeamento fixo de índices (Alinhado perfeitamente com a API e o Poster)
 const INDEX_GEOMETRY_MAP = {
   0:  { side: 'left',  pos: 0  }, 1:  { side: 'left',  pos: 1  },
   2:  { side: 'left',  pos: 2  }, 3:  { side: 'left',  pos: 3  },
@@ -66,7 +64,6 @@ function buildFixedLayout() {
   const arcStart = 0.05 * Math.PI;
   const arcEnd = 0.95 * Math.PI;
 
-  // Round 0
   for (let i = 0; i < totalLeaves; i++) {
     const geo = INDEX_GEOMETRY_MAP[i];
     let angle;
@@ -86,7 +83,6 @@ function buildFixedLayout() {
     });
   }
 
-  // Camadas Internas Hierárquicas
   for (let r = 1; r < totalRounds; r++) {
     const prevLayer = layout[r - 1];
     const count = prevLayer.length / 2;
@@ -109,12 +105,12 @@ function buildFixedLayout() {
 }
 
 // ============================================================
-// COMPILAÇÃO DOS TIMES NAS OITAVAS E QUARTAS
+// MAPEAMENTO RIGOROSO DA SUBIDA – FILTRAGEM ANTI-CLONE
 // ============================================================
 function mapApiToSlots() {
   const layout = buildFixedLayout();
   
-  // 1. População Primária (Fase de 32)
+  // 1. Preenche a primeira rodada (32 avos de final)
   const round0Matches = state.rounds[0]?.matches || [];
   for (let i = 0; i < layout[0].length; i++) {
     const slot = layout[0][i];
@@ -133,7 +129,7 @@ function mapApiToSlots() {
     }
   }
 
-  // 2. Subida para as Oitavas, Quartas e Semis Baseada na Conexão dos Nós Pais
+  // 2. Transmissão estrita para os círculos internos (Oitavas, Quartas, Semis, Final)
   for (let r = 1; r < layout.length; r++) {
     const currentLayer = layout[r];
     const prevLayer = layout[r - 1];
@@ -144,43 +140,40 @@ function mapApiToSlots() {
       const pai1 = prevLayer[i * 2];
       const pai2 = prevLayer[i * 2 + 1];
 
-      // Tenta achar pelo cruzamento direto dos IDs dos times classificados
-      let match = currentRoundMatches.find(m => 
+      // Busca estrita: Apenas associa a partida se ela contiver os times REAIS vindo dos nós pais
+      const match = currentRoundMatches.find(m => 
         (pai1.team?.id && (m.home?.id === pai1.team.id || m.away?.id === pai1.team.id)) ||
         (pai2.team?.id && (m.home?.id === pai2.team.id || m.away?.id === pai2.team.id))
       );
 
-      // FALLBACK SEGURO: Se os times ainda não subiram, associa pelo índice sequencial correspondente
-      if (!match && currentRoundMatches[i]) {
-        match = currentRoundMatches[i];
-      }
-
       if (match) {
         slotFilho.matchId = match.fixtureId;
         
-        // Verifica se há um vencedor declarado na partida
         let winner = null;
         if (match.winnerId != null) {
           winner = (match.home?.id === match.winnerId) ? match.home : match.away;
         } else if (match.status === 'FINISHED') {
-          // Fallback se a API não preencheu o winnerId explicitamente mas fechou o placar
           const hScore = match.score?.home ?? 0;
           const aScore = match.score?.away ?? 0;
           if (hScore > aScore) winner = match.home;
           if (aScore > hScore) winner = match.away;
         }
 
-        // Se encontrou o vencedor, ele assume o nó filho e atualiza o status das linhas
         if (winner) {
+          // O vencedor oficial assume o nó interno
           slotFilho.team = winner;
+          
           if (pai1.team && pai1.team.id === winner.id) { pai1.isWinner = true; pai2.isEliminated = true; }
           if (pai2.team && pai2.team.id === winner.id) { pai2.isWinner = true; pai1.isEliminated = true; }
         } else {
-          // Se a partida está em andamento ou empatada sem definição, traz o time ativo do pai para preencher a linha visual
-          if (pai1.team && !pai1.isEliminated) slotFilho.team = pai1.team;
-          else if (pai2.team && !pai2.isEliminated) slotFilho.team = pai2.team;
+          // Se o jogo não aconteceu ou está ativo/em aberto, não clona! Mantém limpo.
+          slotFilho.team = null;
+          
+          // Mantém as flags de visualização limpas para evitar nós fantasmas
+          if (pai1.team && !pai1.isEliminated) pai1.isWinner = true;
+          if (pai2.team && !pai2.isEliminated) pai2.isWinner = true;
         }
-        
+
         if (match.status === 'FINISHED' && winner && slotFilho.team?.id !== winner.id) {
           slotFilho.isEliminated = true;
         }
@@ -192,7 +185,7 @@ function mapApiToSlots() {
 }
 
 // ============================================================
-// RENDERIZAÇÃO DAS LINHAS E CURVAS DE CONEXÃO
+// RENDERIZAÇÃO DAS CONEXÕES E CURVAS DE FLUXO
 // ============================================================
 function render() {
   if (!svgLayer) return;
@@ -227,11 +220,11 @@ function drawFixedConnections(layout) {
 
       if (!parent1 || !parent2 || !child) continue;
 
-      const color1 = (parent1.isWinner && !parent1.isEliminated) ? (TEAM_COLORS[parent1.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
-      const width1 = (parent1.isWinner && !parent1.isEliminated) ? 2.5 : 1.2;
+      const color1 = (parent1.isWinner && parent1.team && !parent1.isEliminated) ? (TEAM_COLORS[parent1.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
+      const width1 = (parent1.isWinner && parent1.team && !parent1.isEliminated) ? 2.5 : 1.2;
 
-      const color2 = (parent2.isWinner && !parent2.isEliminated) ? (TEAM_COLORS[parent2.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
-      const width2 = (parent2.isWinner && !parent2.isEliminated) ? 2.5 : 1.2;
+      const color2 = (parent2.isWinner && parent2.team && !parent2.isEliminated) ? (TEAM_COLORS[parent2.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
+      const width2 = (parent2.isWinner && parent2.team && !parent2.isEliminated) ? 2.5 : 1.2;
 
       const jointColor = (child.team && !child.isEliminated) ? (TEAM_COLORS[child.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
       const jointWidth = (child.team && !child.isEliminated) ? 2.5 : 1.2;
@@ -260,7 +253,7 @@ function drawSeparatedBezierConnection(r1, angleA, col1, w1, r2, angleB, col2, w
 }
 
 // ============================================================
-// DESENHO DOS NÓS COM ELEMENTOS DE FILTRO
+// DESENHO DOS CIRULOS (NÓS) E VELOCIDADE DE CARREGAMENTO
 // ============================================================
 function drawNode(slot) {
   const { team, radius, angle, round, matchId, isWinner, isEliminated } = slot;
@@ -269,19 +262,20 @@ function drawNode(slot) {
   const [x, y] = polar(radius, angle);
   const g = elNS('g', { 'data-match-id': matchId || '', style: 'cursor: pointer;' });
 
-  const nodeRadius = (isWinner || (team && round > 0)) && !isEliminated ? 17 : 14;
+  const hasActiveTeam = team && team.code && team.code !== 'TBD';
+  const nodeRadius = hasActiveTeam && !isEliminated ? 17 : 14;
 
   const nodeFill = isEliminated ? COLOR_INACTIVE_NODE : '#060608';
-  const nodeStroke = isEliminated ? '#1f1f23' : (isWinner ? '#cc9a18' : '#35353c');
-  const nodeStrokeWidth = isWinner && !isEliminated ? 2.5 : 1;
+  const nodeStroke = isEliminated ? '#1f1f23' : (hasActiveTeam && !isEliminated ? '#cc9a18' : '#35353c');
+  const nodeStrokeWidth = hasActiveTeam && !isEliminated ? 2.2 : 1;
 
   g.appendChild(elNS('circle', { cx: x, cy: y, r: nodeRadius, fill: nodeFill, stroke: nodeStroke, 'stroke-width': nodeStrokeWidth }));
 
-  if (team && team.code && team.code !== 'TBD') {
+  if (hasActiveTeam) {
     const countryCodeUpper = team.code.toUpperCase();
     const countryCodeLower = team.code.toLowerCase();
     
-    const isoMap = { bra: 'br', fra: 'fr', ger: 'de', esp: 'es', arg: 'ar', can: 'ca', mex: 'mx', usa: 'us', eng: 'gb-eng', nor: 'no', por: 'pt', ita: 'it', jpn: 'jp', mar: 'ma' };
+    const isoMap = { bra: 'br', fra: 'fr', ger: 'de', esp: 'es', arg: 'ar', can: 'ca', mex: 'mx', usa: 'us', eng: 'gb-eng', nor: 'no', por: 'pt', ita: 'it', jpn: 'jp', mar: 'ma', sui: 'ch', egy: 'eg', gha: 'gh', col: 'co', bel: 'be', sen: 'sn' };
     const flag2Letter = isoMap[countryCodeLower] || countryCodeLower.substring(0, 2);
     
     const apiFlagUrl = `https://flagcdn.com/${flag2Letter}.svg`;
@@ -302,7 +296,6 @@ function drawNode(slot) {
     });
     g.appendChild(imgFlag);
 
-    // ESCUDOS DAS FEDERAÇÕES EXTERNAS (Apenas no anel inicial)
     if (round === 0) {
       const shieldDistance = radius + 26; 
       const [sx, sy] = polar(shieldDistance, angle);
@@ -339,9 +332,7 @@ function drawNode(slot) {
   svgLayer.appendChild(g);
 }
 
-// ============================================================
-// AUXILIARES STANDARD
-// ============================================================
+// ---------- AUXILIARES GEOMÉTRICOS ----------
 function polar(r, a) {
   return [CX + r * Math.sin(a), CY - r * Math.cos(a)];
 }
