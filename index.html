@@ -268,6 +268,21 @@
   .tooltip-modern .tt-info-row strong {
     color: var(--text);
   }
+  .tooltip-modern .tt-scorer-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .tooltip-modern .tt-scorer-photo {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: #1c1c1f;
+    flex-shrink: 0;
+  }
   .tooltip-modern .tt-upcoming {
     text-align: center;
   }
@@ -515,6 +530,27 @@
       return [CX + r * Math.cos(a), CY + r * Math.sin(a)];
     }
 
+    // --- Helpers de ângulo: garantem que sempre pegamos o caminho mais curto
+    // entre dois ângulos, evitando arcos "invertidos" ou conectores fora de ordem.
+    function normalizeAngle(a) {
+      a = a % 360;
+      if (a < 0) a += 360;
+      return a;
+    }
+
+    // Diferença angular no caminho mais curto, no intervalo (-180, 180].
+    function shortestAngleDiff(a, b) {
+      let diff = normalizeAngle(b - a);
+      if (diff > 180) diff -= 360;
+      return diff;
+    }
+
+    // Ponto médio angular entre dois ângulos, seguindo sempre o arco mais curto.
+    function angularMidpoint(a, b) {
+      const diff = shortestAngleDiff(a, b);
+      return normalizeAngle(a + diff / 2);
+    }
+
     function clear(node) {
       while (node.firstChild) node.removeChild(node.firstChild);
     }
@@ -553,40 +589,12 @@
 
     function drawTrophy() {
       const g = el("g", {});
-      
+
       g.appendChild(
         el("circle", { cx: CX, cy: CY, r: 62, fill: "#0b0b0c", stroke: "#3a2c0c", "stroke-width": 2 })
       );
-      
-      const textGroup = el("g", {});
-      const textRadius = 78;
-      const label = "FINAL • 13 JUL • METLIFE STADIUM • NEW YORK • ";
-      for (let i = 0; i < label.length; i++) {
-        const angle = (i / label.length) * 360;
-        const [x, y] = polar(textRadius, angle);
-        const char = el("text", {
-          x, y,
-          "font-size": "8",
-          fill: "#8a8a8f",
-          "text-anchor": "middle",
-          "dominant-baseline": "central",
-          transform: `rotate(${angle + 90}, ${x}, ${y})`,
-          "letter-spacing": "2",
-        });
-        char.textContent = label[i];
-        textGroup.appendChild(char);
-      }
-      const anim = el("animateTransform", {
-        attributeName: "transform",
-        type: "rotate",
-        from: "0 500 500",
-        to: "360 500 500",
-        dur: "40s",
-        repeatCount: "indefinite"
-      });
-      textGroup.appendChild(anim);
-      g.appendChild(textGroup);
 
+      // Taça animada (GIF), sem o texto girando em volta
       const size = 76;
       g.appendChild(
         el("image", {
@@ -594,12 +602,12 @@
           y: CY - size / 2,
           width: size,
           height: size,
-          href: "/taca.png",
+          href: "/taca.gif",
           preserveAspectRatio: "xMidYMid meet",
           style: "filter: drop-shadow(0 0 30px rgba(217,165,49,0.4))",
         })
       );
-      
+
       svg.appendChild(g);
     }
 
@@ -797,6 +805,13 @@
       tooltip.classList.add("visible");
     }
 
+    // Monta o caminho da foto do artilheiro a partir do nome do jogador.
+    // Arquivo esperado: /assets/img/art/<nome do jogador>.png
+    function scorerPhotoPath(name) {
+      if (!name) return null;
+      return `/assets/img/art/${encodeURIComponent(name)}.png`;
+    }
+
     function showTeamDetails(ev, team) {
       tooltip.style.left = (ev.clientX + 16) + "px";
       tooltip.style.top = (ev.clientY + 16) + "px";
@@ -823,7 +838,12 @@
             ? `${lm.homeTeam} <strong>${lm.homeScore ?? '?'} × ${lm.awayScore ?? '?'}</strong> ${lm.awayTeam}`
             : 'Sem jogos encerrados ainda.';
           const scorerHtml = ts
-            ? `${ts.name} — ${ts.goals} gol${ts.goals === 1 ? '' : 's'}`
+            ? `
+              <div class="tt-scorer-row">
+                <img class="tt-scorer-photo" src="${scorerPhotoPath(ts.name)}" alt="${ts.name}" onerror="this.style.display='none'">
+                <span>${ts.name} — ${ts.goals} gol${ts.goals === 1 ? '' : 's'}</span>
+              </div>
+            `
             : 'Sem dados disponíveis.';
           tooltip.innerHTML = `
             <div class="tt-header">
@@ -832,7 +852,7 @@
               <span class="tt-close" id="ttClose">✕</span>
             </div>
             <div class="tt-info-row"><strong>Último jogo:</strong><br>${lastMatchHtml}</div>
-            <div class="tt-info-row"><strong>Artilheiro da seleção:</strong><br>${scorerHtml}</div>
+            <div class="tt-info-row"><strong>Artilheiro da seleção:</strong>${scorerHtml}</div>
           `;
           document.getElementById("ttClose")?.addEventListener("click", (e) => {
             e.stopPropagation();
@@ -979,7 +999,7 @@
     if (match.home && match.home.id) {
       const homeNode = {
         team: match.home,
-        angle: angle - step / 4,
+        angle: normalizeAngle(angle - step / 4),
         branchIdx: branchIdx,
         matchId: match.id,
         isHome: true,
@@ -992,7 +1012,7 @@
     if (match.away && match.away.id) {
       const awayNode = {
         team: match.away,
-        angle: angle + step / 4,
+        angle: normalizeAngle(angle + step / 4),
         branchIdx: branchIdx,
         matchId: match.id,
         isHome: false,
@@ -1056,22 +1076,9 @@
         continue;
       }
       
-      // CALCULAR O ÂNGULO DO VENCEDOR CORRETAMENTE
-      let childAngle = (homeNode.angle + awayNode.angle) / 2;
-      
-      // CORREÇÃO: garantir que o ângulo do vencedor está no arco correto
-      let diff = awayNode.angle - homeNode.angle;
-      // Normalizar para o menor caminho
-      if (diff > 180) diff -= 360;
-      if (diff < -180) diff += 360;
-      
-      // Se a diferença for grande, ajustar o ângulo médio
-      if (Math.abs(diff) > 150) {
-        let avg = (homeNode.angle + awayNode.angle) / 2;
-        if (avg > 360) avg -= 360;
-        if (avg < 0) avg += 360;
-        childAngle = avg;
-      }
+      // Ângulo do vencedor: sempre o ponto médio pelo caminho mais curto
+      // entre os dois pais, o que mantém o conector sempre "em ordem".
+      const childAngle = angularMidpoint(homeNode.angle, awayNode.angle);
       
       // Determinar o vencedor
       let winnerTeam = null;
@@ -1106,7 +1113,7 @@
       const glowLevel = Math.min(ri, GLOW_AMOUNT.length);
       const lineWidth = Math.min(ri, LINE_WIDTH.length);
 
-      // DESENHAR CONECTOR CORRETAMENTE
+      // Desenhar conector: arco entre os dois pais + linha reta até o filho
       connector(
         r1, 
         homeNode.angle, 
@@ -1174,6 +1181,11 @@
   document.getElementById("refreshBtn")?.addEventListener("click", load);
 }
 
+// Desenha o conector de forma consistente: uma linha reta do pai até o
+// arco intermediário (rMid), o arco propriamente dito seguindo sempre o
+// caminho mais curto entre os dois pais, e uma linha reta do arco até o
+// nó filho (vencedor). Sem casos especiais — isso é o que causava linhas
+// retas fora de ordem antes.
 function connector(rOuter, angleA, angleB, rMid, childAngle, rInner, color, glowLevel, lineWidth) {
   const g = el("g", {
     fill: "none",
@@ -1188,52 +1200,31 @@ function connector(rOuter, angleA, angleB, rMid, childAngle, rInner, color, glow
     g.setAttribute("filter", `url(#glow-${idx})`);
   }
 
-  // CALCULAR OS PONTOS CORRETAMENTE
-  // Ponto 1: time da casa na fase anterior
   const [x1, y1] = polar(rOuter, angleA);
-  
-  // Ponto 2: time visitante na fase anterior
   const [x2, y2] = polar(rOuter, angleB);
-  
-  // Pontos médios no arco
   const [mx1, my1] = polar(rMid, angleA);
   const [mx2, my2] = polar(rMid, angleB);
-  
-  // Ponto do vencedor na fase atual
   const [cx2, cy2] = polar(rInner, childAngle);
-  
-  // Ponto de conexão do vencedor com o arco
   const [cmx, cmy] = polar(rMid, childAngle);
 
-  // VERIFICAR A MENOR DISTÂNCIA ANGULAR
-  let angleDiff = angleB - angleA;
-  // Normalizar para o menor caminho
-  if (angleDiff > 180) angleDiff -= 360;
-  if (angleDiff < -180) angleDiff += 360;
-  
-  // Se a diferença for muito pequena, os times estão muito próximos
-  const useStraightLine = Math.abs(angleDiff) < 5 || Math.abs(angleDiff) > 170;
-  
-  let d;
-  if (useStraightLine) {
-    // Se estiverem muito próximos, usar uma curva simples
-    const [midX, midY] = polar((rOuter + rInner) / 2, childAngle);
-    d = `M${x1},${y1} Q${midX},${midY} ${cx2},${cy2}`;
-  } else {
-    // Arco normal com a curvatura correta
-    const large = Math.abs(angleDiff) > 90 ? 1 : 0;
-    // Determinar a direção do arco (sweep)
-    const sweep = angleDiff > 0 ? 0 : 1;
-    
-    d = 
-      `M${x1},${y1} ` +
-      `L${mx1},${my1} ` +
-      `A${rMid},${rMid} 0 ${large} ${sweep} ${mx2},${my2} ` +
-      `L${x2},${y2} ` +
-      `M${cmx},${cmy} ` +
-      `L${cx2},${cy2}`;
-  }
-  
+  // Diferença angular já normalizada para o caminho mais curto (-180, 180].
+  const diff = shortestAngleDiff(angleA, angleB);
+
+  // Como sempre seguimos o caminho mais curto, o arco nunca passa de 180°,
+  // então o large-arc-flag é sempre 0.
+  const large = 0;
+  // polar() usa ângulo crescente = sentido horário na tela, então o
+  // sweep-flag do SVG (sentido positivo = horário) acompanha o sinal de diff.
+  const sweep = diff >= 0 ? 1 : 0;
+
+  const d =
+    `M${x1},${y1} ` +
+    `L${mx1},${my1} ` +
+    `A${rMid},${rMid} 0 ${large} ${sweep} ${mx2},${my2} ` +
+    `L${x2},${y2} ` +
+    `M${cmx},${cmy} ` +
+    `L${cx2},${cy2}`;
+
   g.appendChild(el("path", { d }));
 
   svg.appendChild(g);
