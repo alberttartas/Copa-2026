@@ -1,272 +1,289 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Copa 2026 – Bracket Circular</title>
+   <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+<div id="app">
+  <svg id="bracket-layer" viewBox="0 0 1200 1000"></svg>
+
+  <div id="tooltip"></div>
+  <div id="panel"></div>
+
+  <div id="status">
+    <span id="statusText">Carregando…</span>
+    <button id="refreshBtn">↻ Atualizar</button>
+  </div>
+</div>
+
 <script type="module">
+(() => {
 
-const NS = 'http://www.w3.org/2000/svg';
+/* =========================
+   DOM BLINDADO (SAFE INIT)
+========================= */
 
-const svgLayer = document.getElementById('bracket-layer');
-const tooltipEl = document.getElementById('tooltip');
-const panelEl = document.getElementById('panel');
-const statusText = document.getElementById('statusText');
-const refreshBtn = document.getElementById('refreshBtn');
+function $(id, warn = true) {
+  const el = document.getElementById(id);
+  if (!el && warn) console.warn(`[DOM] elemento não encontrado: #${id}`);
+  return el;
+}
+
+const svgLayer   = $('bracket-layer');
+const tooltipEl  = $('tooltip');
+const panelEl    = $('panel');
+const statusText = $('statusText');
+const refreshBtn = $('refreshBtn');
+
+/* =========================
+   STATE
+========================= */
 
 const state = {
   rounds: [],
   leaves: [],
   hover: null,
-  updatedAt: null,
+  updatedAt: null
 };
 
-const CX = 600, CY = 500;
+/* =========================
+   SAFE BIND EVENTS
+========================= */
 
+function safeBind() {
+  if (refreshBtn) {
+    refreshBtn.onclick = load;
+  }
+}
+
+/* =========================
+   CONSTANTS
+========================= */
+
+const NS = 'http://www.w3.org/2000/svg';
+const CX = 600, CY = 500;
 const LEVEL_R = [420, 360, 300, 240, 180, 120];
 
-const BRANCH_COLORS = [
-  '#e6484f', '#3ddc84', '#f0c23d', '#4ea1f7',
-  '#b768e0', '#ff9f53', '#2ec4b6', '#ff6f91',
+const COLORS = [
+  '#e6484f','#3ddc84','#f0c23d','#4ea1f7',
+  '#b768e0','#ff9f53','#2ec4b6','#ff6f91'
 ];
 
 const GREY = '#3c3c40';
 
-const NODE_RADIUS = 16;
+/* =========================
+   SVG HELPERS
+========================= */
 
-function el(tag, attrs = {}) {
+function elNS(tag, attrs={}) {
   const n = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
   return n;
 }
 
-function polar(r, a) {
-  return [CX + r * Math.sin(a), CY - r * Math.cos(a)];
+function polar(r,a){
+  return [CX + r*Math.sin(a), CY - r*Math.cos(a)];
 }
 
-function safe(v, f = 0) {
-  return isFinite(v) ? v : f;
+function clear(){
+  if (!svgLayer) return;
+  while(svgLayer.firstChild) svgLayer.removeChild(svgLayer.firstChild);
 }
 
-function midAngle(a, b) {
-  let d = b - a;
-  if (d > Math.PI) d -= 2 * Math.PI;
-  if (d < -Math.PI) d += 2 * Math.PI;
-  return a + d / 2;
-}
-
-function clearSVG() {
-  while (svgLayer.firstChild) svgLayer.removeChild(svgLayer.firstChild);
-}
+/* =========================
+   NODE SAFE
+========================= */
 
 function drawNode(team, r, a, color, pending, matchId) {
+  if (!svgLayer) return;
   if (!isFinite(a)) return;
-  const [x, y] = polar(r, a);
-  if (!isFinite(x) || !isFinite(y)) return;
 
-  const g = el('g');
+  const [x,y] = polar(r,a);
+  if (!isFinite(x)||!isFinite(y)) return;
 
-  g.appendChild(el('circle', {
-    cx: x,
-    cy: y,
-    r: NODE_RADIUS,
+  const g = elNS('g');
+
+  g.appendChild(elNS('circle',{
+    cx:x, cy:y, r:14,
     fill: pending ? '#222' : color,
-    stroke: '#000',
-    'stroke-width': 1.5
+    stroke:'#000'
   }));
 
-  const t = el('text', {
-    x,
-    y: y + 4,
-    'text-anchor': 'middle',
-    'font-size': 9,
-    fill: '#fff'
+  const t = elNS('text',{
+    x, y:y+4,
+    'text-anchor':'middle',
+    'font-size':10,
+    fill:'#fff'
   });
 
   t.textContent = team?.code || 'TBD';
   g.appendChild(t);
 
-  g.addEventListener('mouseenter', (e) => {
+  g.onmouseenter = (e)=>{
     const rect = svgLayer.getBoundingClientRect();
     state.hover = {
-      matchId,
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
+      x:e.clientX-rect.left,
+      y:e.clientY-rect.top,
+      matchId
     };
     renderUI();
-  });
+  };
 
-  g.addEventListener('mouseleave', () => {
-    state.hover = null;
+  g.onmouseleave = ()=>{
+    state.hover=null;
     renderUI();
-  });
+  };
 
   svgLayer.appendChild(g);
 }
 
-function drawConnection(r, a, b, color) {
-  if (!isFinite(a) || !isFinite(b)) return;
+/* =========================
+   CONNECTION SAFE
+========================= */
 
-  const [x1, y1] = polar(r, a);
-  const [x2, y2] = polar(r, b);
+function connect(r,a,b,color){
+  if(!svgLayer) return;
+  if(!isFinite(a)||!isFinite(b)) return;
 
-  if (!isFinite(x1) || !isFinite(y1) || !isFinite(x2) || !isFinite(y2)) return;
+  const [x1,y1]=polar(r,a);
+  const [x2,y2]=polar(r,b);
 
-  const p = el('path', {
-    d: `M${x1},${y1} A${r},${r} 0 0 1 ${x2},${y2}`,
-    stroke: color,
-    fill: 'none',
-    'stroke-width': 2
+  const p=elNS('path',{
+    d:`M${x1},${y1} A${r},${r} 0 0 1 ${x2},${y2}`,
+    stroke:color,
+    fill:'none'
   });
 
   svgLayer.appendChild(p);
 }
 
 /* =========================
-   INDEXAÇÃO SEGURA
+   LOAD SAFE
 ========================= */
 
-const matchMap = new Map();
+async function load(){
+  if(statusText) statusText.textContent='Atualizando...';
 
-function indexMatches(rounds) {
-  matchMap.clear();
-  for (const r of rounds) {
-    for (const m of (r.matches || [])) {
-      matchMap.set(m.fixtureId, m);
+  try{
+    const r=await fetch('/api/bracket');
+    const d=await r.json();
+
+    state.rounds=d.rounds||[];
+    state.leaves=d.leaves||[];
+
+    render();
+
+    if(statusText){
+      statusText.textContent='OK';
     }
-  }
-}
 
-function propagateWinners(rounds) {
-  indexMatches(rounds);
-
-  for (const r of rounds) {
-    for (const m of (r.matches || [])) {
-      if (!m.nextMatchId) continue;
-
-      const next = matchMap.get(m.nextMatchId);
-      if (!next) continue;
-
-      let winner = null;
-
-      if (m.winnerId != null) {
-        winner = (m.home?.id === m.winnerId) ? m.home : m.away;
-      } else if (m.status === 'FINISHED') {
-        const h = m.score?.home ?? 0;
-        const a = m.score?.away ?? 0;
-
-        if (h > a) winner = m.home;
-        else if (a > h) winner = m.away;
-      }
-
-      if (!winner) continue;
-
-      if (m.nextSlot === 'home') next.home = winner;
-      else if (m.nextSlot === 'away') next.away = winner;
+  }catch(e){
+    console.error(e);
+    if(statusText){
+      statusText.textContent='Erro API';
     }
   }
 }
 
 /* =========================
-   RENDER
+   RENDER SAFE
 ========================= */
 
-function render() {
-  clearSVG();
+function render(){
+  if(!svgLayer) return;
 
-  const rounds = state.rounds || [];
-  const leaves = state.leaves || [];
+  clear();
 
-  if (!rounds.length || !leaves.length) return;
+  const leaves=state.leaves||[];
+  const rounds=state.rounds||[];
 
-  propagateWinners(rounds);
+  if(!leaves.length||!rounds.length) return;
 
-  const N = leaves.length;
-
-  let prevNodes = leaves.map((t, i) => {
-    const a = (i / N) * Math.PI * 2 - Math.PI / 2;
-    const colorIndex = Math.floor(i / (N / 8)) % 8;
-
-    drawNode(t, LEVEL_R[0], a, BRANCH_COLORS[colorIndex], false, null);
-
-    return {
-      team: t,
-      angle: a,
-      colorIndex
-    };
+  let prev=leaves.map((t,i)=>{
+    const a=(i/leaves.length)*Math.PI*2;
+    const c=COLORS[i%8];
+    drawNode(t,LEVEL_R[0],a,c,false,null);
+    return {team:t,angle:a,colorIndex:i%8};
   });
 
-  for (let ri = 0; ri < rounds.length; ri++) {
-    const matches = rounds[ri].matches || [];
-    const r1 = LEVEL_R[ri];
-    const r2 = LEVEL_R[ri + 1] || LEVEL_R[LEVEL_R.length - 1];
+  for(const [ri,round] of rounds.entries()){
+    const r1=LEVEL_R[ri];
+    const r2=LEVEL_R[ri+1]||LEVEL_R[ri];
 
-    const current = [];
+    const current=[];
 
-    for (const m of matches) {
-      const homeParent = prevNodes.find(n => n.team?.id && n.team.id === m.home?.id);
-      const awayParent = prevNodes.find(n => n.team?.id && n.team.id === m.away?.id);
+    for(const m of round.matches||[]){
 
-      if (!homeParent || !awayParent) continue;
+      const h=prev.find(n=>n.team?.id===m.home?.id);
+      const a=prev.find(n=>n.team?.id===m.away?.id);
 
-      const a = midAngle(homeParent.angle, awayParent.angle);
+      if(!h||!a) continue;
 
-      let winner = null;
-      if (m.winnerId != null) {
-        winner = (m.home?.id === m.winnerId) ? m.home : m.away;
-      }
+      const angle=(h.angle+a.angle)/2;
 
-      const color =
-        BRANCH_COLORS[homeParent.colorIndex ?? awayParent.colorIndex ?? 0];
+      const color=COLORS[h.colorIndex??0];
 
-      drawConnection(r1, homeParent.angle, awayParent.angle, color);
+      connect(r1,h.angle,a.angle,color);
 
       drawNode(
-        winner || { code: 'TBD' },
+        m.winnerId
+          ? (m.home?.id===m.winnerId?m.home:m.away)
+          : {code:'TBD'},
         r2,
-        a,
-        winner ? color : GREY,
-        !winner,
+        angle,
+        m.winnerId?color:GREY,
+        !m.winnerId,
         m.fixtureId
       );
 
-      current.push({
-        team: winner || {},
-        angle: a,
-        colorIndex: homeParent.colorIndex ?? 0
-      });
+      current.push({team:m.winner||{},angle,colorIndex:h.colorIndex});
     }
 
-    prevNodes = current;
+    prev=current;
   }
-}
-
-function renderUI() {
-  if (!tooltipEl || !panelEl) return;
-
-  const h = state.hover;
-  if (!h) {
-    tooltipEl.style.opacity = 0;
-    panelEl.style.opacity = 0;
-    return;
-  }
-
-  tooltipEl.style.opacity = 1;
-  tooltipEl.style.transform =
-    `translate3d(${h.x+10}px,${h.y+10}px,0)`;
 }
 
 /* =========================
-   LOAD
+   UI SAFE
 ========================= */
 
-async function load() {
-  const res = await fetch('/api/bracket');
-  const data = await res.json();
+function renderUI(){
+  if(!tooltipEl||!panelEl) return;
 
-  state.rounds = data.rounds || [];
-  state.leaves = data.leaves || [];
+  if(!state.hover){
+    tooltipEl.style.opacity=0;
+    panelEl.style.opacity=1;
+    return;
+  }
 
-  render();
+  tooltipEl.style.opacity=1;
+  tooltipEl.style.transform=
+    `translate3d(${state.hover.x+10}px,${state.hover.y+10}px,0)`;
 }
 
-refreshBtn.onclick = load;
+/* =========================
+   START SAFE
+========================= */
 
-load();
-setInterval(load, 90000);
+function init(){
+  safeBind();
+  load();
+  setInterval(load,90000);
+}
 
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',init);
+}else{
+  init();
+}
+
+})();
 </script>
+
+</body>
+</html>
