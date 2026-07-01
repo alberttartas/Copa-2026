@@ -1,5 +1,5 @@
 // ============================================================
-// BRACKET CIRCULAR – GEOMETRIA RIGIDAMENTE FIEL AO POSTER
+// BRACKET CIRCULAR – COPA DO MUNDO 2026 (CORREÇÃO DE POSIÇÃO E SUBIDA)
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -24,37 +24,12 @@ const state = {
 const CX = 600, CY = 500;
 const LEVEL_R = [420, 360, 300, 240, 180, 120];
 
-// Paleta sóbria do poster original
 const COLOR_INACTIVE_LINE = '#26262b';
 const COLOR_INACTIVE_NODE = '#111113';
 
 // ============================================================
-// MAPEAMENTO SEQUENCIAL EXATO DAS SELEÇÕES (DO TOPO PARA A BASE)
-// Organizado em pares de chaves para evitar cruzamento de conexões
+// DICIONÁRIO DE CORES DOS CAMINHOS ATIVOS (IDÊNTICO AO POSTER)
 // ============================================================
-const FIXED_POSITION_MAP = [
-  // --- ASA ESQUERDA (Do topo superior esquerdo descendo até o fundo) ---
-  { code: 'FRA', side: 'left' },  { code: 'RSA', side: 'left' },
-  { code: 'GER', side: 'left' },  { code: 'PAR', side: 'left' },
-  { code: 'CAN', side: 'left' },  { code: 'MAR', side: 'left' },
-  { code: 'POR', side: 'left' },  { code: 'CRO', side: 'left' },
-  { code: 'ESP', side: 'left' },  { code: 'AUT', side: 'left' },
-  { code: 'USA', side: 'left' },  { code: 'BIH', side: 'left' },
-  { code: 'BEL', side: 'left' },  { code: 'SEN', side: 'left' },
-  { code: 'GHA', side: 'left' },  { code: 'EGY', side: 'left' },
-
-  // --- ASA DIREITA (Do topo superior direito descendo até o fundo) ---
-  { code: 'BRA', side: 'right' }, { code: 'JPN', side: 'right' },
-  { code: 'NOR', side: 'right' }, { code: 'THA', side: 'right' },
-  { code: 'MEX', side: 'right' }, { code: 'ECU', side: 'right' },
-  { code: 'ENG', side: 'right' }, { code: 'CIV', side: 'right' },
-  { code: 'ARG', side: 'right' }, { code: 'ITA', side: 'right' },
-  { code: 'CPV', side: 'right' }, { code: 'AUS', side: 'right' },
-  { code: 'IRQ', side: 'right' }, { code: 'COL', side: 'right' },
-  { code: 'ALG', side: 'right' }, { side: 'right' }
-];
-
-// Cores de linhas ativas extraídas do poster para os caminhos vencedores
 const TEAM_COLORS = {
   BRA: '#cc9a18', FRA: '#1e4391', CAN: '#b51219', MAR: '#0d6130',
   NOR: '#a61423', MEX: '#0b4728', ENG: '#d1d1d1', ARG: '#5b96cb',
@@ -62,32 +37,71 @@ const TEAM_COLORS = {
 };
 
 // ============================================================
-// COMPILAÇÃO DA ÁRVORE COM SIMETRIA VERTICAL
+// MAPA DETALHADO DE POSICIONAMENTO POR INDICE DA API
+// Crucial para garantir que o time 'X' vá para o lugar 'Y' sem quebrar as oitavas
 // ============================================================
+const INDEX_GEOMETRY_MAP = {
+  // Lado Esquerdo (Topo ao Fundo)
+  0:  { side: 'left',  pos: 0  }, // FRA
+  1:  { side: 'left',  pos: 1  }, // RSA
+  2:  { side: 'left',  pos: 2  }, // GER
+  3:  { side: 'left',  pos: 3  }, // PAR
+  4:  { side: 'left',  pos: 4  }, // CAN
+  5:  { side: 'left',  pos: 5  }, // MAR
+  6:  { side: 'left',  pos: 6  }, // POR
+  7:  { side: 'left',  pos: 7  }, // CRO
+  8:  { side: 'left',  pos: 8  }, // ESP
+  9:  { side: 'left',  pos: 9  }, // AUT
+  10: { side: 'left',  pos: 10 }, // USA
+  11: { side: 'left',  pos: 11 }, // BIH
+  12: { side: 'left',  pos: 12 }, // BEL
+  13: { side: 'left',  pos: 13 }, // SEN
+  14: { side: 'left',  pos: 14 }, // GHA
+  15: { side: 'left',  pos: 15 }, // EGY
 
+  // Lado Direito (Topo ao Fundo)
+  16: { side: 'right', pos: 0  }, // BRA
+  17: { side: 'right', pos: 1  }, // JPN
+  18: { side: 'right', pos: 2  }, // NOR
+  19: { side: 'right', pos: 3  }, // THA
+  20: { side: 'right', pos: 4  }, // MEX
+  21: { side: 'right', pos: 5  }, // ECU
+  22: { side: 'right', pos: 6  }, // ENG
+  23: { side: 'right', pos: 7  }, // CIV
+  24: { side: 'right', pos: 8  }, // ARG
+  25: { side: 'right', pos: 9  }, // ITA
+  26: { side: 'right', pos: 10 }, // CPV
+  27: { side: 'right', pos: 11 }, // AUS
+  28: { side: 'right', pos: 12 }, // IRQ
+  29: { side: 'right', pos: 13 }, // COL
+  30: { side: 'right', pos: 14 }, // ALG
+  31: { side: 'right', pos: 15 }  // SUI
+};
+
+// ============================================================
+// CONSTRUTOR DO LAYOUT GEOMÉTRICO FIEL
+// ============================================================
 function buildFixedLayout() {
   const totalLeaves = 32;
   const totalRounds = Math.log2(totalLeaves) + 1;
   const layout = Array.from({ length: totalRounds }, () => []);
   const half = totalLeaves / 2;
 
-  // Distribuição angular corrigida partindo do topo central para baixo
+  // Define os arcos laterais exatamente como no poster original
+  const arcStart = 0.05 * Math.PI;
+  const arcEnd = 0.95 * Math.PI;
+
+  // Cria o Round 0 mapeando os índices nativos da API para seus ângulos corretos
   for (let i = 0; i < totalLeaves; i++) {
+    const geo = INDEX_GEOMETRY_MAP[i];
     let angle;
-    const meta = FIXED_POSITION_MAP[i];
 
-    // Arco útil de renderização para cada lado (evitando sobreposição total no topo/base)
-    const arcStart = 0.08 * Math.PI;
-    const arcEnd = 0.92 * Math.PI;
-
-    if (meta.side === 'left') {
-      const percent = i / (half - 1);
-      const targetAngle = arcStart + (arcEnd - arcStart) * percent;
-      angle = Math.PI + targetAngle; // Transpõe para o quadrante esquerdo
+    if (geo.side === 'left') {
+      const percent = geo.pos / (half - 1);
+      angle = Math.PI + (arcStart + (arcEnd - arcStart) * percent);
     } else {
-      const idx = i - half;
-      const percent = idx / (half - 1);
-      angle = arcStart + (arcEnd - arcStart) * percent; // Quadrante direito
+      const percent = geo.pos / (half - 1);
+      angle = arcStart + (arcEnd - arcStart) * percent;
     }
 
     layout[0].push({
@@ -96,7 +110,7 @@ function buildFixedLayout() {
       index: i,
       angle,
       radius: LEVEL_R[0],
-      team: { code: meta.code, name: meta.code },
+      team: null,
       matchId: null,
       isEliminated: false,
       isWinner: false,
@@ -105,7 +119,7 @@ function buildFixedLayout() {
     });
   }
 
-  // Geração geométrica das chaves internas conectando os nós pai
+  // Monta as chaves internas (Oitavas, Quartas, Semis, Final)
   for (let r = 1; r < totalRounds; r++) {
     const prevLayer = layout[r - 1];
     const count = prevLayer.length / 2;
@@ -136,35 +150,37 @@ function buildFixedLayout() {
 }
 
 // ============================================================
-// FILTRAGEM DE INFRAESTRUTURA DE PARTIDAS
+// PROCESSAMENTO DOS DADOS DA API E SUBIDA DOS TIMES ATIVOS
 // ============================================================
-
 function mapApiToSlots() {
   const layout = buildFixedLayout();
   const round0Matches = state.rounds[0]?.matches || [];
 
+  // 1. Popula o Round Inicial respeitando o alinhamento de chaves
   for (let i = 0; i < layout[0].length; i++) {
     const slot = layout[0][i];
-    if (!slot.team.code) continue;
-
-    const match = round0Matches.find(m => 
-      m.home?.code?.toUpperCase() === slot.team.code || 
-      m.away?.code?.toUpperCase() === slot.team.code
-    );
+    
+    // Pega a partida sequencial da API correspondente a esse slot
+    const matchIdx = Math.floor(i / 2);
+    const match = round0Matches[matchIdx];
 
     if (match) {
-      const isHome = match.home?.code?.toUpperCase() === slot.team.code;
-      const actualTeam = isHome ? match.home : match.away;
+      const isEven = i % 2 === 0;
+      const actualTeam = isEven ? match.home : match.away;
 
-      slot.team = actualTeam;
-      slot.matchId = match.fixtureId;
+      if (actualTeam) {
+        slot.team = actualTeam;
+        slot.matchId = match.fixtureId;
 
-      if (match.winnerId && match.winnerId !== actualTeam.id) {
-        slot.isEliminated = true;
+        // Se a partida acabou e este time não foi o vencedor, ele está eliminado
+        if (match.status === 'FINISHED' && match.winnerId && match.winnerId !== actualTeam.id) {
+          slot.isEliminated = true;
+        }
       }
     }
   }
 
+  // 2. Sobe os times vitoriosos para os círculos internos (Oitavas, Quartas, etc.)
   for (let r = 1; r < layout.length; r++) {
     const currentLayer = layout[r];
     const prevLayer = layout[r - 1];
@@ -175,6 +191,7 @@ function mapApiToSlots() {
       const pai1 = prevLayer[i * 2];
       const pai2 = prevLayer[i * 2 + 1];
 
+      // Encontra a partida baseada nos times que subiram dos nós anteriores
       const match = currentRoundMatches.find(m => 
         (pai1.team?.id && (m.home?.id === pai1.team.id || m.away?.id === pai1.team.id)) ||
         (pai2.team?.id && (m.home?.id === pai2.team.id || m.away?.id === pai2.team.id))
@@ -190,6 +207,8 @@ function mapApiToSlots() {
 
         if (winner) {
           slotFilho.team = winner;
+          
+          // Marca quem ganhou e quem perdeu para acender as linhas certas
           if (pai1.team && pai1.team.id === winner.id) { pai1.isWinner = true; pai2.isEliminated = true; }
           if (pai2.team && pai2.team.id === winner.id) { pai2.isWinner = true; pai1.isEliminated = true; }
         }
@@ -205,9 +224,8 @@ function mapApiToSlots() {
 }
 
 // ============================================================
-// RENDERIZAÇÃO DAS LINHAS E CURVAS DE CONEXÃO
+// RENDERIZAÇÃO DO SVG E CONEXÕES CURVAS
 // ============================================================
-
 function render() {
   if (!svgLayer) return;
   clearSVG();
@@ -241,15 +259,14 @@ function drawFixedConnections(layout) {
 
       if (!parent1 || !parent2 || !child) continue;
 
-      // Se o time foi eliminado, a linha vira cinza escuro nativo do poster
       const color1 = (parent1.isWinner && !parent1.isEliminated) ? (TEAM_COLORS[parent1.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
-      const width1 = (parent1.isWinner && !parent1.isEliminated) ? 2.2 : 1.1;
+      const width1 = (parent1.isWinner && !parent1.isEliminated) ? 2.5 : 1.2;
 
       const color2 = (parent2.isWinner && !parent2.isEliminated) ? (TEAM_COLORS[parent2.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
-      const width2 = (parent2.isWinner && !parent2.isEliminated) ? 2.2 : 1.1;
+      const width2 = (parent2.isWinner && !parent2.isEliminated) ? 2.5 : 1.2;
 
       const jointColor = (child.team && !child.isEliminated) ? (TEAM_COLORS[child.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
-      const jointWidth = (child.team && !child.isEliminated) ? 2.2 : 1.1;
+      const jointWidth = (child.team && !child.isEliminated) ? 2.5 : 1.2;
 
       drawSeparatedBezierConnection(
         parent1.radius, parent1.angle, color1, width1,
@@ -275,9 +292,8 @@ function drawSeparatedBezierConnection(r1, angleA, col1, w1, r2, angleB, col2, w
 }
 
 // ============================================================
-// DESENHO DOS NÓS COM PERDA DE COR NOS ELIMINADOS
+// RENDERIZAÇÃO DOS NÓS COM PRETO E BRANCO NOS ELIMINADOS
 // ============================================================
-
 function drawNode(slot) {
   const { team, radius, angle, round, matchId, isWinner, isEliminated } = slot;
   if (!isFinite(angle)) return;
@@ -285,10 +301,10 @@ function drawNode(slot) {
   const [x, y] = polar(radius, angle);
   const g = elNS('g', { 'data-match-id': matchId || '', style: 'cursor: pointer;' });
 
-  const nodeRadius = isWinner && !isEliminated ? 16 : 13;
+  const nodeRadius = isWinner && !isEliminated ? 17 : 14;
 
   const nodeFill = isEliminated ? COLOR_INACTIVE_NODE : '#060608';
-  const nodeStroke = isEliminated ? '#202024' : (isWinner ? '#cc9a18' : '#38383f');
+  const nodeStroke = isEliminated ? '#1f1f23' : (isWinner ? '#cc9a18' : '#35353c');
   const nodeStrokeWidth = isWinner && !isEliminated ? 2.5 : 1;
 
   g.appendChild(elNS('circle', { cx: x, cy: y, r: nodeRadius, fill: nodeFill, stroke: nodeStroke, 'stroke-width': nodeStrokeWidth }));
@@ -314,12 +330,11 @@ function drawNode(slot) {
       href: apiFlagUrl,
       preserveAspectRatio: 'xMidYMid slice',
       'clip-path': `url(#${clipId})`,
-      // Deixa a bandeira em grayscale fosco idêntico ao poster original
       style: isEliminated ? 'filter: grayscale(1) opacity(0.18);' : ''
     });
     g.appendChild(imgFlag);
 
-    // ESCUDOS EXTERNOS DAS FEDERAÇÕES (Apenas Round Inicial)
+    // ESCUDOS DAS FEDERAÇÕES (Apenas anel externo)
     if (round === 0) {
       const shieldDistance = radius + 26; 
       const [sx, sy] = polar(shieldDistance, angle);
@@ -337,14 +352,14 @@ function drawNode(slot) {
       imgFederation.onerror = () => imgFederation.remove();
       svgLayer.appendChild(imgFederation);
       
-      const [lx, ly] = polar(radius + 13, angle);
+      const [lx, ly] = polar(radius + 14, angle);
       svgLayer.appendChild(elNS('line', {
         x1: lx, y1: ly, x2: sx, y2: sy,
         stroke: isEliminated ? '#1c1c20' : '#2d2d34', 'stroke-width': 1, 'stroke-dasharray': '2,2'
       }));
     }
   } else {
-    const t = elNS('text', { x, y: y + 3, 'text-anchor': 'middle', 'font-size': 7, fill: '#2d2d33', 'font-weight': 'bold', 'font-family': 'sans-serif' });
+    const t = elNS('text', { x, y: y + 3, 'text-anchor': 'middle', 'font-size': 7, fill: '#28282d', 'font-weight': 'bold', 'font-family': 'sans-serif' });
     t.textContent = 'TBD';
     g.appendChild(t);
   }
@@ -360,9 +375,8 @@ function drawNode(slot) {
 }
 
 // ============================================================
-// AUXILIARES DE SUPORTE STANDARD
+// SUPORTE STANDARD GEOMÉTRICO
 // ============================================================
-
 function polar(r, a) {
   return [CX + r * Math.sin(a), CY - r * Math.cos(a)];
 }
