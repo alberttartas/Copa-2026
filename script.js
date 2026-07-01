@@ -1,5 +1,5 @@
 // ============================================================
-// BRACKET CIRCULAR – LAYOUT BOTTOM-UP (GEOMETRIA PERFEITA)
+// BRACKET CIRCULAR – GEOMETRIA ESPELHADA & IMAGENS DINÂMICAS
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -35,22 +35,34 @@ const COLORS = [
 const GREY = '#3c3c40';
 
 // ============================================================
-// LAYOUT BOTTOM-UP – ÂNGULO DOS FILHOS = MÉDIA DOS PAIS
+// LAYOUT ESPELHADA (IDÊNTICO À REFERÊNCIA)
 // ============================================================
 
 function buildFixedLayout(totalLeaves) {
   const totalRounds = Math.log2(totalLeaves) + 1;
   const layout = [];
 
-  // Inicializa arrays para cada round
   for (let r = 0; r < totalRounds; r++) {
     layout.push([]);
   }
 
-  // ---------- ROUND 0 (FOLHAS) – DISTRIBUIÇÃO UNIFORME ----------
-  const countLeaves = totalLeaves;
-  for (let i = 0; i < countLeaves; i++) {
-    const angle = (i / countLeaves) * 2 * Math.PI - Math.PI / 2;
+  // ---------- ROUND 0 (FOLHAS) – DIVISÃO EM DOIS HEMISFÉRIOS ----------
+  const half = totalLeaves / 2;
+
+  for (let i = 0; i < totalLeaves; i++) {
+    let angle;
+    
+    if (i < half) {
+      // 🟩 HEMISFÉRIO ESQUERDO (Avança da esquerda para o centro)
+      const percent = i / (half - 1);
+      angle = Math.PI + (Math.PI / 1.25) * (percent - 0.5);
+    } else {
+      // 🟨 HEMISFÉRIO DIREITO (Avança da direita para o centro)
+      const idx = i - half;
+      const percent = idx / (half - 1);
+      angle = (Math.PI / 1.25) * (0.5 - percent);
+    }
+
     const radius = LEVEL_R[0];
 
     layout[0].push({
@@ -69,7 +81,7 @@ function buildFixedLayout(totalLeaves) {
     });
   }
 
-  // ---------- ROUNDS SEGUINTES – MÉDIA DOS PAIS ----------
+  // ---------- ROUNDS SEGUINTES – CAMINHO RADIAL PERFEITO ----------
   for (let r = 1; r < totalRounds; r++) {
     const prevLayer = layout[r - 1];
     const count = prevLayer.length / 2;
@@ -79,14 +91,8 @@ function buildFixedLayout(totalLeaves) {
       const parent1 = prevLayer[i * 2];
       const parent2 = prevLayer[i * 2 + 1];
 
-      // 🔥 O ângulo do filho é a média exata dos dois pais
-      let angle = (parent1.angle + parent2.angle) / 2;
-
-      // Ajuste para evitar wrap-around (ex: 350° e 10° -> 0°)
-      let diff = parent2.angle - parent1.angle;
-      if (diff > Math.PI) diff -= 2 * Math.PI;
-      if (diff < -Math.PI) diff += 2 * Math.PI;
-      angle = parent1.angle + diff / 2;
+      // Média geométrica simples e segura por hemisfério
+      const angle = (parent1.angle + parent2.angle) / 2;
 
       layout[r].push({
         id: `r${r}_n${i}`,
@@ -96,7 +102,7 @@ function buildFixedLayout(totalLeaves) {
         radius,
         team: null,
         matchId: null,
-        colorIndex: i % COLORS.length,
+        colorIndex: parent1.colorIndex, // Mantém a cor da ramificação original
         isPending: true,
         isWinner: false,
         x: CX + radius * Math.sin(angle),
@@ -109,14 +115,14 @@ function buildFixedLayout(totalLeaves) {
 }
 
 // ============================================================
-// MAPEAMENTO API → SLOTS (POR fixtureId)
-// ===
+// MAPEAMENTO API → SLOTS (POR ASSOCIAÇÃO 1:1 ESTRITA)
+// ============================================================
 
 function mapApiToSlots(leaves, rounds) {
   const totalLeaves = leaves.length || 32;
   const layout = buildFixedLayout(totalLeaves);
 
-  // 1. ROUND 0: Posiciona as folhas iniciais na ordem da API
+  // 1. Popula o Round 0 (Folhas)
   const leafSlots = layout[0] || [];
   for (let i = 0; i < leaves.length && i < leafSlots.length; i++) {
     const slot = leafSlots[i];
@@ -125,29 +131,15 @@ function mapApiToSlots(leaves, rounds) {
     slot.isWinner = false;
   }
 
-  // 2. ROUNDS SEGUINTES: Mapeamento Lógico por descendência direta
-  // Em vez de seguir o índice 'i' da API, o slot do filho depende de quais 
-  // eram os slots dos pais no round anterior.
+  // 2. Popula os Rounds Seguintes por Índice Linear Direto da Árvore Binária
   for (let ri = 0; ri < rounds.length; ri++) {
     const round = rounds[ri];
     const matches = round.matches || [];
-    const currentLayer = layout[ri];     // Camada dos pais
-    const nextLayer = layout[ri + 1] || []; // Camada dos filhos
+    const nextLayer = layout[ri + 1] || [];
 
-    // Para cada slot de jogo futuro (filho), olhamos os dois slots que o geraram
     for (let i = 0; i < nextLayer.length; i++) {
-      const slotFilho = nextLayer[i];
-      
-      // Os dois slots "pais" que geram este slot filho
-      const pai1 = currentLayer[i * 2];
-      const pai2 = currentLayer[i * 2 + 1];
-
-      // Procuramos na API o jogo onde o Time A (pai1) enfrenta o Time B (pai2)
-      // Ou buscamos pela ordem lógica esperada do cruzamento
-      const match = matches.find(m => 
-        (m.home?.id === pai1.team?.id || m.away?.id === pai1.team?.id) ||
-        (m.home?.id === pai2.team?.id || m.away?.id === pai2.team?.id)
-      ) || matches[i]; // Fallback caso o jogo ainda não tenha times definidos
+      const slot = nextLayer[i];
+      const match = matches[i];
 
       if (match) {
         let winner = null;
@@ -161,20 +153,24 @@ function mapApiToSlots(leaves, rounds) {
           const a = match.score?.away ?? 0;
           if (h > a) { decided = true; winner = match.home; } 
           else if (a > h) { decided = true; winner = match.away; }
+          else if (match.score?.penalties) {
+            const ph = match.score.penalties?.home ?? 0;
+            const pa = match.score.penalties?.away ?? 0;
+            if (ph > pa) { decided = true; winner = match.home; } 
+            else if (pa > ph) { decided = true; winner = match.away; }
+          }
         }
 
-        // Aloca os dados da API no slot geometricamente correto!
-        slotFilho.team = winner || null;
-        slotFilho.isPending = !decided;
-        slotFilho.matchId = match.fixtureId;
-        slotFilho.isWinner = decided;
+        slot.team = winner || null;
+        slot.isPending = !decided;
+        slot.matchId = match.fixtureId;
+        slot.isWinner = decided;
       }
     }
   }
 
   return layout;
 }
-
 
 // ============================================================
 // RENDER SVG
@@ -187,7 +183,6 @@ function render() {
   const { rounds, leaves } = state;
   const totalLeaves = leaves.length || 32;
 
-  // Layout fixo
   const layout = (leaves.length && rounds.length)
     ? mapApiToSlots(leaves, rounds)
     : buildFixedLayout(totalLeaves);
@@ -195,7 +190,7 @@ function render() {
   drawBackground();
   drawFixedConnections(layout);
 
-  // Desenhar nós
+  // Renderizar os nós com imagens
   for (const layer of layout) {
     for (const slot of layer) {
       const team = slot.team;
@@ -226,7 +221,7 @@ function render() {
 }
 
 // ============================================================
-// CONEXÕES FIXAS (USANDO SLOTS)
+// CONEXÕES FIXAS
 // ============================================================
 
 function drawFixedConnections(layout) {
@@ -263,7 +258,7 @@ function drawFixedConnections(layout) {
 }
 
 // ============================================================
-// CONEXÃO POR BÉZIER
+// CURVAS BÉZIER RADIAIS
 // ============================================================
 
 function drawBezierConnection(r1, angleA, r2, angleB, rMid, childAngle, rChild, color) {
@@ -306,7 +301,7 @@ function drawBezierConnection(r1, angleA, r2, angleB, rMid, childAngle, rChild, 
 }
 
 // ============================================================
-// NÓ (TIME) – POSIÇÃO FIXA, ESTADO VARIÁVEL
+// NÓ COMPACTO (ESCUDO LOCAL COM FALLBACK PARA BANDEIRA API)
 // ============================================================
 
 function drawNode(team, r, a, color, pending, matchId, isWinner) {
@@ -315,31 +310,68 @@ function drawNode(team, r, a, color, pending, matchId, isWinner) {
   const [x, y] = polar(r, a);
   if (!isFinite(x) || !isFinite(y)) return;
 
-  const g = elNS('g', { 'data-match-id': matchId || '' });
+  const g = elNS('g', { 'data-match-id': matchId || '', style: 'cursor: pointer;' });
 
-  const radius = isWinner ? 18 : 14;
+  // Tamanhos ideais semelhantes ao mockup de referência
+  const radius = isWinner ? 19 : 15;
   const strokeWidth = isWinner ? 3 : 1.5;
 
+  // Círculo de borda e fundo
   g.appendChild(elNS('circle', {
     cx: x,
     cy: y,
     r: radius,
     fill: pending ? '#222' : color,
-    stroke: isWinner ? '#d9a531' : '#000',
+    stroke: isWinner ? '#d9a531' : '#111',
     'stroke-width': strokeWidth,
   }));
 
-  const t = elNS('text', {
-    x,
-    y: y + 4,
-    'text-anchor': 'middle',
-    'font-size': isWinner ? 11 : 9,
-    fill: '#fff',
-    'font-weight': isWinner ? 'bold' : 'normal',
-  });
-  t.textContent = team?.code || 'TBD';
-  g.appendChild(t);
+  if (!pending && team && team.code !== 'TBD') {
+    const countryCode = team.code.toLowerCase();
+    
+    // Caminhos de imagem definidos
+    const localShieldUrl = `assets/img/federations/${countryCode}.svg`;
+    const apiFlagUrl = team.flag || `https://flagcdn.com/${countryCode === 'ger' ? 'de' : countryCode.substring(0,2)}.svg`;
 
+    // Criação da Máscara de Recorte Circular (ClipPath)
+    const clipId = `clip-${countryCode}-${r}-${Math.floor(Math.abs(a)*100)}`;
+    const clipPath = elNS('clipPath', { id: clipId });
+    clipPath.appendChild(elNS('circle', { cx: x, cy: y, r: radius - 0.5 }));
+    svgLayer.appendChild(clipPath);
+
+    // Elemento da Imagem
+    const img = elNS('image', {
+      x: x - radius,
+      y: y - radius,
+      width: radius * 2,
+      height: radius * 2,
+      href: localShieldUrl, // Tenta primeiro o Escudo da Federação Local
+      preserveAspectRatio: 'xMidYMid slice',
+      'clip-path': `url(#${clipId})`
+    });
+
+    // Fallback estratégico: se o arquivo .svg local não existir, renderiza a flag da API
+    img.onerror = () => {
+      img.setAttribute('href', apiFlagUrl);
+    };
+
+    g.appendChild(img);
+  } else {
+    // Texto TBD discreto interno para nós vazios
+    const t = elNS('text', {
+      x,
+      y: y + 3,
+      'text-anchor': 'middle',
+      'font-size': 8,
+      fill: '#555',
+      'font-weight': 'bold',
+      'font-family': 'sans-serif'
+    });
+    t.textContent = 'TBD';
+    g.appendChild(t);
+  }
+
+  // ---------- MOUSE INTERACTION ----------
   g.onmouseenter = (e) => {
     const rect = svgLayer.getBoundingClientRect();
     state.hover = {
@@ -359,7 +391,7 @@ function drawNode(team, r, a, color, pending, matchId, isWinner) {
 }
 
 // ============================================================
-// FUNÇÕES AUXILIARES
+// HELPER FUNCTIONS
 // ============================================================
 
 function polar(r, a) {
@@ -376,40 +408,32 @@ function clearSVG() {
   while (svgLayer.firstChild) svgLayer.removeChild(svgLayer.firstChild);
 }
 
-// ============================================================
-// FUNDO E ANÉIS
-// ============================================================
-
 function drawBackground() {
   const defs = elNS('defs', { id: 'defs' });
   const grad = elNS('radialGradient', { id: 'bgGlow', cx: '50%', cy: '50%', r: '55%' });
-  grad.appendChild(elNS('stop', { offset: '0%', 'stop-color': '#3a2c0c' }));
-  grad.appendChild(elNS('stop', { offset: '55%', 'stop-color': '#15120a' }));
-  grad.appendChild(elNS('stop', { offset: '100%', 'stop-color': '#0b0b0c' }));
+  grad.appendChild(elNS('stop', { offset: '0%', 'stop-color': '#2a2210' }));
+  grad.appendChild(elNS('stop', { offset: '60%', 'stop-color': '#11100d' }));
+  grad.appendChild(elNS('stop', { offset: '100%', 'stop-color': '#070708' }));
   defs.appendChild(grad);
   svgLayer.appendChild(defs);
   svgLayer.appendChild(elNS('rect', { x: 0, y: 0, width: 1200, height: 1000, fill: 'url(#bgGlow)' }));
 
   LEVEL_R.forEach((r) => {
-    svgLayer.appendChild(elNS('circle', { cx: CX, cy: CY, r, fill: 'none', stroke: '#222226', 'stroke-width': 1 }));
+    svgLayer.appendChild(elNS('circle', { cx: CX, cy: CY, r, fill: 'none', stroke: '#1f1f23', 'stroke-width': 1 }));
   });
 }
 
-// ============================================================
-// TAÇA CENTRAL
-// ============================================================
-
 function drawTrophy() {
   const g = elNS('g');
-  g.appendChild(elNS('circle', { cx: CX, cy: CY, r: 56, fill: '#0b0b0c', stroke: '#3a2c0c', 'stroke-width': 2 }));
-  const t = elNS('text', { x: CX, y: CY + 8, 'text-anchor': 'middle', 'font-size': 40, fill: '#d9a531' });
+  g.appendChild(elNS('circle', { cx: CX, cy: CY, r: 52, fill: '#070708', stroke: '#2a2210', 'stroke-width': 2 }));
+  const t = elNS('text', { x: CX, y: CY + 12, 'text-anchor': 'middle', 'font-size': 42, fill: '#d9a531' });
   t.textContent = '🏆';
   g.appendChild(t);
   svgLayer.appendChild(g);
 }
 
 // ============================================================
-// UI (TOOLTIP + PANEL)
+// UI TOOLTIP & PANEL HANDLERS
 // ============================================================
 
 function renderUI() {
@@ -479,7 +503,7 @@ function renderUI() {
 }
 
 // ============================================================
-// LOAD (ANTI-RACE)
+// DATA DESPATCHER (ANTI-RACE)
 // ============================================================
 
 let requestId = 0;
@@ -517,10 +541,6 @@ async function load() {
   }
 }
 
-// ============================================================
-// INICIALIZAÇÃO
-// ============================================================
-
 if (refreshBtn) {
   refreshBtn.addEventListener('click', () => {
     if (!state.loading) load();
@@ -530,4 +550,4 @@ if (refreshBtn) {
 load();
 setInterval(load, 90000);
 
-console.log('🏆 Bracket circular com layout bottom-up iniciado.');
+console.log('🏆 Chaveamento de Copa do Mundo estruturado com sucesso.');
