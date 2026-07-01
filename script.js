@@ -1,10 +1,10 @@
 // ============================================================
-// BRACKET CIRCULAR – HIERARQUIA REAL (VERSÃO PROFISSIONAL)
+// BRACKET CIRCULAR – LAYOUT FIXO (ARQUITETURA ESPORTIVA)
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
 
-// ---------- DOM (SAFE) ----------
+// ---------- DOM ----------
 const svgLayer = document.getElementById('bracket-layer');
 const tooltipEl = document.getElementById('tooltip');
 const panelEl = document.getElementById('panel');
@@ -20,17 +20,10 @@ if (!svgLayer || !tooltipEl || !panelEl || !statusText) {
 const state = {
   rounds: [],
   leaves: [],
-  hover: null, // { x, y, matchId }
+  hover: null,
   updatedAt: null,
   loading: false,
 };
-
-// ---------- SAFE CLICK ----------
-if (refreshBtn) {
-  refreshBtn.addEventListener('click', () => {
-    if (!state.loading) load();
-  });
-}
 
 // ---------- CONSTANTS ----------
 const CX = 600,
@@ -43,69 +36,116 @@ const COLORS = [
 ];
 const GREY = '#3c3c40';
 
-// ---------- HELPERS ----------
-function elNS(tag, attrs = {}) {
-  const el = document.createElementNS(NS, tag);
-  for (const k in attrs) el.setAttribute(k, attrs[k]);
-  return el;
-}
+// ============================================================
+// LAYOUT FIXO – POSIÇÕES PRÉ-DEFINIDAS
+// ============================================================
+const TOTAL_ROUNDS = 6; // leaves + 5 fases
 
-function polar(r, a) {
-  return [CX + r * Math.sin(a), CY - r * Math.cos(a)];
-}
+function buildFixedLayout() {
+  const positions = [];
+  const slotMap = new Map();
 
-function clearSVG() {
-  while (svgLayer.firstChild) svgLayer.removeChild(svgLayer.firstChild);
-}
+  // Níveis: [folhas, r16, qf, sf, final, campeão]
+  const radii = LEVEL_R;
 
-// ---------- SAFE JSON ----------
-async function safeJSON(res) {
-  const text = await res.text();
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error('API retornou JSON inválido');
-  }
-}
+  for (let r = 0; r < radii.length; r++) {
+    const count = Math.pow(2, 5 - r); // 32, 16, 8, 4, 2, 1
+    const layer = [];
 
-// ---------- LOAD (ANTI-RACE) ----------
-let requestId = 0;
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * 2 * Math.PI - Math.PI / 2;
+      const id = `r${r}-${i}`;
 
-async function load() {
-  const id = ++requestId;
-  state.loading = true;
+      const slot = {
+        id,
+        round: r,
+        index: i,
+        r: radii[r],
+        angle,
+        x: CX + radii[r] * Math.sin(angle),
+        y: CY - radii[r] * Math.cos(angle),
+        team: null, // preenchido pela API
+        matchId: null,
+        isPending: true,
+        isWinner: false,
+      };
 
-  if (statusText) statusText.textContent = 'Atualizando...';
-
-  try {
-    const res = await fetch('/api/bracket', { cache: 'no-store' });
-    const data = await safeJSON(res);
-
-    if (id !== requestId) return; // abort race
-
-    state.rounds = data.rounds || [];
-    state.leaves = data.leaves || [];
-    state.updatedAt = data.updatedAt || null;
-
-    render();
-    renderUI();
-
-    if (statusText) {
-      const ts = state.updatedAt
-        ? new Date(state.updatedAt).toLocaleString('pt-BR')
-        : 'agora';
-      statusText.textContent = `✅ Atualizado ${ts}`;
+      layer.push(slot);
+      slotMap.set(id, slot);
     }
-  } catch (e) {
-    console.error(e);
-    if (statusText) statusText.textContent = '❌ Erro ao carregar';
-  } finally {
-    state.loading = false;
+
+    positions.push(layer);
   }
+
+  return { positions, slotMap };
+}
+
+// Layout fixo (nunca muda)
+const { positions, slotMap } = buildFixedLayout();
+
+// ============================================================
+// MAPEAMENTO: SLOT → MATCH (por índice)
+// ============================================================
+function mapMatchesToSlots(rounds, leaves) {
+  // Primeira fase: leaves preenchem os slots da camada 0
+  const leafSlots = positions[0] || [];
+
+  // Mapear leaves para slots (2 por match)
+  const slotMapping = new Map();
+
+  // Preencher slots da primeira fase com leaves
+  leaves.forEach((team, i) => {
+    if (i < leafSlots.length) {
+      const slot = leafSlots[i];
+      slot.team = team;
+      slot.isPending = false;
+      slot.matchId = null;
+      slotMapping.set(slot.id, { team, isLeaf: true });
+    }
+  });
+
+  // Preencher slots das fases seguintes a partir dos rounds
+  for (let ri = 0; ri < rounds.length; ri++) {
+    const round = rounds[ri];
+    const matches = round.matches || [];
+    const nextLayer = positions[ri + 1] || [];
+
+    for (let i = 0; i < matches.length; i++) {
+      const match = matches[i];
+      const slot = nextLayer[i];
+
+      if (slot) {
+        // Determinar vencedor
+        let winner = null;
+        if (match.winnerId != null) {
+          winner = match.home?.id === match.winnerId ? match.home : match.away;
+        } else if (match.status === 'FINISHED' && match.score) {
+          const h = match.score?.home ?? 0;
+          const a = match.score?.away ?? 0;
+          if (h > a) winner = match.home;
+          else if (a > h) winner = match.away;
+          else if (match.score?.penalties) {
+            const ph = match.score.penalties?.home ?? 0;
+            const pa = match.score.penalties?.away ?? 0;
+            if (ph > pa) winner = match.home;
+            else if (pa > ph) winner = match.away;
+          }
+        }
+
+        slot.team = winner || null;
+        slot.isPending = !winner;
+        slot.matchId = match.fixtureId;
+        slot.isWinner = !!winner;
+        slotMapping.set(slot.id, { team: slot.team, match, isWinner: !!winner });
+      }
+    }
+  }
+
+  return slotMapping;
 }
 
 // ============================================================
-// RENDER PRINCIPAL (COM HIERARQUIA REAL)
+// RENDER SVG (USANDO LAYOUT FIXO)
 // ============================================================
 function render() {
   if (!svgLayer) return;
@@ -117,130 +157,201 @@ function render() {
     return;
   }
 
-  // ---------- TAÇA CENTRAL ----------
-  drawTrophy();
+  // Mapear dados para slots fixos
+  const slotMapping = mapMatchesToSlots(rounds, leaves);
 
-  // ---------- FUNDO E ANÉIS ----------
+  // ---------- FUNDO ----------
   drawBackground();
 
-  // ---------- FASE 0: LEAVES (PRIMEIRA FASE) ----------
-  const totalLeaves = leaves.length;
-  const halfLeaves = totalLeaves / 2;
+  // ---------- DESENHAR CONEXÕES (FIXAS) ----------
+  drawFixedConnections();
 
-  let prevNodes = leaves.map((team, i) => {
-    // Distribuição por confrontos: cada match ocupa um setor
-    const matchIndex = Math.floor(i / 2);
-    const isHome = i % 2 === 0;
+  // ---------- DESENHAR NÓS ----------
+  for (const layer of positions) {
+    for (const slot of layer) {
+      const team = slot.team;
+      const isPending = slot.isPending;
+      const color = isPending ? GREY : COLORS[slot.index % COLORS.length];
 
-    // Ângulo base do confronto
-    const baseAngle = (matchIndex / halfLeaves) * 2 * Math.PI - Math.PI / 2;
-
-    // Offset para home/away dentro do confronto
-    const offset = isHome ? -0.08 : 0.08;
-    const angle = baseAngle + offset;
-
-    const colorIdx = matchIndex % COLORS.length;
-    const color = COLORS[colorIdx];
-
-    drawNode(team, LEVEL_R[0], angle, color, false, null);
-
-    return {
-      team,
-      angle,
-      colorIndex: colorIdx,
-      matchIndex,
-      isHome,
-    };
-  });
-
-  // ---------- FASES SEGUINTES ----------
-  for (let ri = 0; ri < rounds.length; ri++) {
-    const round = rounds[ri];
-    const matches = round.matches || [];
-
-    const r1 = LEVEL_R[ri];
-    const r2 = LEVEL_R[ri + 1] || LEVEL_R[ri];
-
-    const currentNodes = [];
-
-    // 🔥 PERFORMANCE FIX: Cache por ID (O(n) em vez de O(n²))
-    const prevMap = new Map(prevNodes.map(p => [p.team?.id, p]));
-
-    for (let i = 0; i < matches.length; i++) {
-      const match = matches[i];
-
-      // Busca O(1) por ID em vez de O(n) com find()
-      const homeParent = prevMap.get(match.home?.id);
-      const awayParent = prevMap.get(match.away?.id);
-
-      if (!homeParent || !awayParent) continue;
-
-      // Ângulo do filho = média dos ângulos dos pais (com ajuste de wrap)
-      let childAngle = (homeParent.angle + awayParent.angle) / 2;
-      let diff = awayParent.angle - homeParent.angle;
-      if (diff > Math.PI) diff -= 2 * Math.PI;
-      if (diff < -Math.PI) diff += 2 * Math.PI;
-      childAngle = homeParent.angle + diff / 2;
-
-      // Determinar vencedor
-      let winnerTeam = null;
-      let decided = false;
-      if (match.winnerId != null) {
-        decided = true;
-        winnerTeam = match.home?.id === match.winnerId ? match.home : match.away;
-      } else if (match.status === 'FINISHED' && match.score) {
-        const hScore = match.score?.home ?? 0;
-        const aScore = match.score?.away ?? 0;
-        if (hScore > aScore) { decided = true;
-          winnerTeam = match.home; } else if (aScore > hScore) { decided = true;
-          winnerTeam = match.away; } else if (match.score?.penalties) {
-          const ph = match.score.penalties?.home ?? 0;
-          const pa = match.score.penalties?.away ?? 0;
-          if (ph > pa) { decided = true;
-            winnerTeam = match.home; } else if (pa > ph) { decided = true;
-            winnerTeam = match.away; }
-        }
-      }
-
-      // Cor do ramo (herdada do pai que venceu)
-      const winnerIsHome = decided && winnerTeam && winnerTeam.id === match.home?.id;
-      const colorIdx = decided
-        ? (winnerIsHome ? homeParent.colorIndex : awayParent.colorIndex)
-        : homeParent.colorIndex;
-      const color = decided ? COLORS[colorIdx] : GREY;
-
-      // ---------- CONEXÃO (BÉZIER) ----------
-      drawBezierConnection(r1, homeParent.angle, awayParent.angle, r2, childAngle, color);
-
-      // ---------- NÓ DO VENCEDOR ----------
-      const teamObj = winnerTeam || { name: 'TBD', code: 'TBD', id: null };
       drawNode(
-        teamObj,
-        r2,
-        childAngle,
-        decided ? color : GREY,
-        !decided,
-        match.fixtureId
+        team || { code: 'TBD', name: 'TBD' },
+        slot.r,
+        slot.angle,
+        color,
+        isPending,
+        slot.matchId,
+        slot.isWinner
       );
-
-      currentNodes.push({
-        team: teamObj,
-        angle: childAngle,
-        colorIndex: colorIdx,
-        matchIndex: i,
-        isHome: false,
-      });
     }
+  }
 
-    prevNodes = currentNodes;
+  // ---------- TAÇA ----------
+  drawTrophy();
 
-    // Se não houver mais nós, interrompe
-    if (prevNodes.length === 0) break;
+  // ---------- STATUS ----------
+  if (statusText) {
+    const ts = state.updatedAt
+      ? new Date(state.updatedAt).toLocaleString('pt-BR')
+      : 'agora';
+    statusText.textContent = `✅ Atualizado ${ts}`;
   }
 }
 
 // ============================================================
-// DESENHO DE FUNDO E ANÉIS
+// CONEXÕES FIXAS (PRÉ-DEFINIDAS)
+// ============================================================
+function drawFixedConnections() {
+  // Para cada round, conectar slots pai → filho
+  for (let r = 0; r < positions.length - 1; r++) {
+    const currentLayer = positions[r];
+    const nextLayer = positions[r + 1];
+
+    const r1 = LEVEL_R[r];
+    const rMid = (LEVEL_R[r] + LEVEL_R[r + 1]) / 2;
+
+    for (let i = 0; i < currentLayer.length; i += 2) {
+      const parent1 = currentLayer[i];
+      const parent2 = currentLayer[i + 1];
+      const child = nextLayer[Math.floor(i / 2)];
+
+      if (!parent1 || !parent2 || !child) continue;
+
+      const color = COLORS[Math.floor(i / 2) % COLORS.length];
+
+      // Conexão com Bézier fixa
+      drawBezierConnection(
+        parent1.r,
+        parent1.angle,
+        parent2.r,
+        parent2.angle,
+        rMid,
+        child.angle,
+        child.r,
+        color
+      );
+    }
+  }
+}
+
+// ============================================================
+// CONEXÃO POR BÉZIER
+// ============================================================
+function drawBezierConnection(r1, angleA, r2, angleB, rMid, childAngle, rChild, color) {
+  if (!isFinite(angleA) || !isFinite(angleB) || !isFinite(childAngle)) return;
+
+  const [x1, y1] = polar(r1, angleA);
+  const [x2, y2] = polar(r1, angleB);
+  const [cx, cy] = polar(rMid, childAngle);
+  const [cx2, cy2] = polar(rChild, childAngle);
+
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2;
+
+  // Curva 1: pai1 → centro
+  const path1 = elNS('path', {
+    d: `M${x1},${y1} Q${midX},${midY} ${cx},${cy}`,
+    stroke: color || '#4b5563',
+    fill: 'none',
+    'stroke-width': 2,
+    'stroke-linecap': 'round',
+  });
+  svgLayer.appendChild(path1);
+
+  // Curva 2: centro → pai2
+  const path2 = elNS('path', {
+    d: `M${cx},${cy} Q${midX},${midY} ${x2},${y2}`,
+    stroke: color || '#4b5563',
+    fill: 'none',
+    'stroke-width': 2,
+    'stroke-linecap': 'round',
+  });
+  svgLayer.appendChild(path2);
+
+  // Linha vertical: centro → filho
+  const path3 = elNS('path', {
+    d: `M${cx},${cy} L${cx2},${cy2}`,
+    stroke: color || '#4b5563',
+    fill: 'none',
+    'stroke-width': 2,
+    'stroke-linecap': 'round',
+  });
+  svgLayer.appendChild(path3);
+}
+
+// ============================================================
+// NÓ (TIME) – COM SLOT FIXO
+// ============================================================
+function drawNode(team, r, a, color, pending, matchId, isWinner) {
+  if (!isFinite(a)) return;
+
+  const [x, y] = polar(r, a);
+  if (!isFinite(x) || !isFinite(y)) return;
+
+  const g = elNS('g', { 'data-match-id': matchId || '' });
+
+  // Círculo do nó (destaque se for vencedor)
+  const radius = isWinner ? 18 : 14;
+  const strokeWidth = isWinner ? 3 : 1.5;
+
+  g.appendChild(elNS('circle', {
+    cx: x,
+    cy: y,
+    r: radius,
+    fill: pending ? '#222' : color,
+    stroke: isWinner ? '#d9a531' : '#000',
+    'stroke-width': strokeWidth,
+  }));
+
+  // Texto (código do time)
+  const t = elNS('text', {
+    x,
+    y: y + 4,
+    'text-anchor': 'middle',
+    'font-size': isWinner ? 11 : 9,
+    fill: '#fff',
+    'font-weight': isWinner ? 'bold' : 'normal',
+  });
+  t.textContent = team?.code || 'TBD';
+  g.appendChild(t);
+
+  // Eventos (hover)
+  g.onmouseenter = (e) => {
+    const rect = svgLayer.getBoundingClientRect();
+    state.hover = {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+      matchId,
+    };
+    renderUI();
+  };
+
+  g.onmouseleave = () => {
+    state.hover = null;
+    renderUI();
+  };
+
+  svgLayer.appendChild(g);
+}
+
+// ============================================================
+// FUNÇÕES AUXILIARES (polar, clear, etc.)
+// ============================================================
+function polar(r, a) {
+  return [CX + r * Math.sin(a), CY - r * Math.cos(a)];
+}
+
+function elNS(tag, attrs = {}) {
+  const el = document.createElementNS(NS, tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+}
+
+function clearSVG() {
+  while (svgLayer.firstChild) svgLayer.removeChild(svgLayer.firstChild);
+}
+
+// ============================================================
+// FUNDO E ANÉIS
 // ============================================================
 function drawBackground() {
   const defs = elNS('defs', { id: 'defs' });
@@ -270,93 +381,7 @@ function drawTrophy() {
 }
 
 // ============================================================
-// CONEXÃO POR BÉZIER (SUAVE E PROFISSIONAL)
-// ============================================================
-function drawBezierConnection(r1, angleA, angleB, r2, childAngle, color) {
-  if (!isFinite(angleA) || !isFinite(angleB) || !isFinite(childAngle)) return;
-
-  const [x1, y1] = polar(r1, angleA);
-  const [x2, y2] = polar(r1, angleB);
-  const [cx, cy] = polar((r1 + r2) / 2, childAngle);
-
-  const midX = (x1 + x2) / 2;
-  const midY = (y1 + y2) / 2;
-
-  // Curva Bézier suave
-  const path = elNS('path', {
-    d: `M${x1},${y1} Q${midX},${midY} ${cx},${cy}`,
-    stroke: color || '#4b5563',
-    fill: 'none',
-    'stroke-width': 2,
-    'stroke-linecap': 'round',
-  });
-  svgLayer.appendChild(path);
-
-  // Segunda curva (do centro até o filho)
-  const path2 = elNS('path', {
-    d: `M${cx},${cy} Q${midX},${midY} ${x2},${y2}`,
-    stroke: color || '#4b5563',
-    fill: 'none',
-    'stroke-width': 2,
-    'stroke-linecap': 'round',
-  });
-  svgLayer.appendChild(path2);
-}
-
-// ============================================================
-// NÓ (TIME)
-// ============================================================
-function drawNode(team, r, a, color, pending, matchId) {
-  if (!isFinite(a)) return;
-
-  const [x, y] = polar(r, a);
-  if (!isFinite(x) || !isFinite(y)) return;
-
-  const g = elNS('g', { 'data-match-id': matchId || '' });
-
-  // Círculo do nó
-  g.appendChild(elNS('circle', {
-    cx: x,
-    cy: y,
-    r: 16,
-    fill: pending ? '#222' : color,
-    stroke: '#000',
-    'stroke-width': 1.5,
-  }));
-
-  // Texto (código do time)
-  const t = elNS('text', {
-    x,
-    y: y + 4,
-    'text-anchor': 'middle',
-    'font-size': 9,
-    fill: '#fff',
-    'font-weight': 'bold',
-  });
-  t.textContent = team?.code || 'TBD';
-  g.appendChild(t);
-
-  // Eventos (hover)
-  g.onmouseenter = (e) => {
-    const rect = svgLayer.getBoundingClientRect();
-    state.hover = {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-      matchId,
-    };
-    renderUI();
-  };
-
-  g.onmouseleave = () => {
-    state.hover = null;
-    renderUI();
-  };
-
-  svgLayer.appendChild(g);
-}
-
-// ============================================================
-// UI (TOOLTIP + PANEL) – CORRIGIDO COM CONTEÚDO REAL
+// UI (TOOLTIP + PANEL)
 // ============================================================
 function renderUI() {
   if (!tooltipEl || !panelEl) return;
@@ -384,13 +409,9 @@ function renderUI() {
 
   const home = match.home?.name || 'TBD';
   const away = match.away?.name || 'TBD';
-  const homeCode = match.home?.code || 'TBD';
-  const awayCode = match.away?.code || 'TBD';
-
   const score = match.status === 'FINISHED'
     ? `${match.score?.home ?? 0} – ${match.score?.away ?? 0}`
     : match.isLive ? 'AO VIVO' : 'VS';
-
   const stage = match.stage || 'Fase eliminatória';
   const date = match.date ? new Date(match.date).toLocaleDateString('pt-BR') : '--/--';
   const time = match.date ? new Date(match.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
@@ -400,7 +421,7 @@ function renderUI() {
     : null;
   const winnerName = winner?.name || '';
 
-  // ===== TOOLTIP (flutuante) =====
+  // ===== TOOLTIP =====
   tooltipEl.innerHTML = `
     <div><strong>${home}</strong> vs <strong>${away}</strong></div>
     <div class="score">${score}</div>
@@ -412,7 +433,7 @@ function renderUI() {
   tooltipEl.style.transform = `translate3d(${hover.x + 16}px, ${hover.y + 16}px, 0)`;
   tooltipEl.classList.add('visible');
 
-  // ===== PANEL (fixo) =====
+  // ===== PANEL =====
   panelEl.innerHTML = `
     <div class="match-title">
       <span>${home}</span>
@@ -432,9 +453,54 @@ function renderUI() {
 }
 
 // ============================================================
+// LOAD (COM ANTI-RACE)
+// ============================================================
+let requestId = 0;
+
+async function load() {
+  const id = ++requestId;
+  state.loading = true;
+
+  if (statusText) statusText.textContent = 'Atualizando...';
+
+  try {
+    const res = await fetch('/api/bracket', { cache: 'no-store' });
+    const data = await res.json();
+
+    if (id !== requestId) return;
+
+    state.rounds = data.rounds || [];
+    state.leaves = data.leaves || [];
+    state.updatedAt = data.updatedAt || null;
+
+    render();
+    renderUI();
+
+    if (statusText) {
+      const ts = state.updatedAt
+        ? new Date(state.updatedAt).toLocaleString('pt-BR')
+        : 'agora';
+      statusText.textContent = `✅ Atualizado ${ts}`;
+    }
+  } catch (e) {
+    console.error(e);
+    if (statusText) statusText.textContent = '❌ Erro ao carregar';
+  } finally {
+    state.loading = false;
+  }
+}
+
+// ============================================================
 // INICIALIZAÇÃO
 // ============================================================
+if (refreshBtn) {
+  refreshBtn.addEventListener('click', () => {
+    if (!state.loading) load();
+  });
+}
+
 load();
 setInterval(load, 90000);
 
-console.log('🏆 Bracket circular profissional iniciado.');
+console.log('🏆 Bracket circular com layout fixo iniciado.');
+console.log(`📊 Slots: ${positions.reduce((acc, l) => acc + l.length, 0)} nós fixos`);
