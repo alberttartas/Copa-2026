@@ -1,5 +1,5 @@
 // ============================================================
-// BRACKET CIRCULAR – COPA DO MUNDO 2026 (POSICIONAMENTO RIGIDAMENTE CORRETO)
+// BRACKET CIRCULAR – GEOMETRIA RIGIDAMENTE FIEL AO POSTER
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -24,16 +24,16 @@ const state = {
 const CX = 600, CY = 500;
 const LEVEL_R = [420, 360, 300, 240, 180, 120];
 
-const COLOR_INACTIVE_LINE = '#2a2a2e';
-const COLOR_INACTIVE_NODE = '#141416';
+// Paleta sóbria do poster original
+const COLOR_INACTIVE_LINE = '#26262b';
+const COLOR_INACTIVE_NODE = '#111113';
 
 // ============================================================
-// MAPA REAL DE ADVERSÁRIOS E POSIÇÕES SEGUINDO A IMAGEM 1782936066953.jpeg
-// Reorganizado par por par para que as conexões fiquem idênticas ao design
+// MAPEAMENTO SEQUENCIAL EXATO DAS SELEÇÕES (DO TOPO PARA A BASE)
+// Organizado em pares de chaves para evitar cruzamento de conexões
 // ============================================================
 const FIXED_POSITION_MAP = [
-  // --- HEMISFÉRIO ESQUERDO (Índices 0 a 15) ---
-  // Topo Esquerdo descendo até a Base Esquerda
+  // --- ASA ESQUERDA (Do topo superior esquerdo descendo até o fundo) ---
   { code: 'FRA', side: 'left' },  { code: 'RSA', side: 'left' },
   { code: 'GER', side: 'left' },  { code: 'PAR', side: 'left' },
   { code: 'CAN', side: 'left' },  { code: 'MAR', side: 'left' },
@@ -43,8 +43,7 @@ const FIXED_POSITION_MAP = [
   { code: 'BEL', side: 'left' },  { code: 'SEN', side: 'left' },
   { code: 'GHA', side: 'left' },  { code: 'EGY', side: 'left' },
 
-  // --- HEMISFÉRIO DIREITO (Índices 16 a 31) ---
-  // Topo Direito descendo até a Base Direita
+  // --- ASA DIREITA (Do topo superior direito descendo até o fundo) ---
   { code: 'BRA', side: 'right' }, { code: 'JPN', side: 'right' },
   { code: 'NOR', side: 'right' }, { code: 'THA', side: 'right' },
   { code: 'MEX', side: 'right' }, { code: 'ECU', side: 'right' },
@@ -52,40 +51,43 @@ const FIXED_POSITION_MAP = [
   { code: 'ARG', side: 'right' }, { code: 'ITA', side: 'right' },
   { code: 'CPV', side: 'right' }, { code: 'AUS', side: 'right' },
   { code: 'IRQ', side: 'right' }, { code: 'COL', side: 'right' },
-  { code: 'ALG', side: 'right' }, { code: 'SUI', side: 'right' }
+  { code: 'ALG', side: 'right' }, { side: 'right' }
 ];
 
-// Cores de realce para as seleções que estiverem ativas e avançando
+// Cores de linhas ativas extraídas do poster para os caminhos vencedores
 const TEAM_COLORS = {
-  BRA: '#e5c158', FRA: '#2b52a1', CAN: '#c8232b', MAR: '#177d43',
-  NOR: '#ba2031', MEX: '#155c37', ENG: '#ffffff', ARG: '#74acdf',
-  GER: '#ffffff', POR: '#b81920', ESP: '#dd1a22', USA: '#0a3161'
+  BRA: '#cc9a18', FRA: '#1e4391', CAN: '#b51219', MAR: '#0d6130',
+  NOR: '#a61423', MEX: '#0b4728', ENG: '#d1d1d1', ARG: '#5b96cb',
+  GER: '#d1d1d1', POR: '#991116', ESP: '#bd1117', USA: '#042247'
 };
 
 // ============================================================
-// GERADOR GEOMÉTRICO DO BRACKET
+// COMPILAÇÃO DA ÁRVORE COM SIMETRIA VERTICAL
 // ============================================================
 
 function buildFixedLayout() {
   const totalLeaves = 32;
   const totalRounds = Math.log2(totalLeaves) + 1;
   const layout = Array.from({ length: totalRounds }, () => []);
-
   const half = totalLeaves / 2;
 
+  // Distribuição angular corrigida partindo do topo central para baixo
   for (let i = 0; i < totalLeaves; i++) {
     let angle;
     const meta = FIXED_POSITION_MAP[i];
 
+    // Arco útil de renderização para cada lado (evitando sobreposição total no topo/base)
+    const arcStart = 0.08 * Math.PI;
+    const arcEnd = 0.92 * Math.PI;
+
     if (meta.side === 'left') {
-      // Ângulos precisos do hemisfério esquerdo (sentido anti-horário)
       const percent = i / (half - 1);
-      angle = Math.PI + (Math.PI / 1.1) * (percent - 0.5);
+      const targetAngle = arcStart + (arcEnd - arcStart) * percent;
+      angle = Math.PI + targetAngle; // Transpõe para o quadrante esquerdo
     } else {
-      // Ângulos precisos do hemisfério direito (sentido horário)
       const idx = i - half;
       const percent = idx / (half - 1);
-      angle = (Math.PI / 1.1) * (0.5 - percent);
+      angle = arcStart + (arcEnd - arcStart) * percent; // Quadrante direito
     }
 
     layout[0].push({
@@ -103,7 +105,7 @@ function buildFixedLayout() {
     });
   }
 
-  // Geração Bottom-Up estrutural limpa
+  // Geração geométrica das chaves internas conectando os nós pai
   for (let r = 1; r < totalRounds; r++) {
     const prevLayer = layout[r - 1];
     const count = prevLayer.length / 2;
@@ -134,17 +136,17 @@ function buildFixedLayout() {
 }
 
 // ============================================================
-// VINCULAÇÃO E FILTRAGEM DINÂMICA DA API
+// FILTRAGEM DE INFRAESTRUTURA DE PARTIDAS
 // ============================================================
 
 function mapApiToSlots() {
   const layout = buildFixedLayout();
   const round0Matches = state.rounds[0]?.matches || [];
 
-  // 1. Resolve Round 0 casando o time pré-definido com as partidas ativas
   for (let i = 0; i < layout[0].length; i++) {
     const slot = layout[0][i];
-    
+    if (!slot.team.code) continue;
+
     const match = round0Matches.find(m => 
       m.home?.code?.toUpperCase() === slot.team.code || 
       m.away?.code?.toUpperCase() === slot.team.code
@@ -163,7 +165,6 @@ function mapApiToSlots() {
     }
   }
 
-  // 2. Calcula as subidas e aplica efeito cinza nos nós perdedores/eliminados
   for (let r = 1; r < layout.length; r++) {
     const currentLayer = layout[r];
     const prevLayer = layout[r - 1];
@@ -189,7 +190,6 @@ function mapApiToSlots() {
 
         if (winner) {
           slotFilho.team = winner;
-          
           if (pai1.team && pai1.team.id === winner.id) { pai1.isWinner = true; pai2.isEliminated = true; }
           if (pai2.team && pai2.team.id === winner.id) { pai2.isWinner = true; pai1.isEliminated = true; }
         }
@@ -205,7 +205,7 @@ function mapApiToSlots() {
 }
 
 // ============================================================
-// RENDERING DO SVG (LINHAS DISCRETAS / REALCES)
+// RENDERIZAÇÃO DAS LINHAS E CURVAS DE CONEXÃO
 // ============================================================
 
 function render() {
@@ -241,14 +241,15 @@ function drawFixedConnections(layout) {
 
       if (!parent1 || !parent2 || !child) continue;
 
+      // Se o time foi eliminado, a linha vira cinza escuro nativo do poster
       const color1 = (parent1.isWinner && !parent1.isEliminated) ? (TEAM_COLORS[parent1.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
-      const width1 = (parent1.isWinner && !parent1.isEliminated) ? 2.2 : 1.2;
+      const width1 = (parent1.isWinner && !parent1.isEliminated) ? 2.2 : 1.1;
 
       const color2 = (parent2.isWinner && !parent2.isEliminated) ? (TEAM_COLORS[parent2.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
-      const width2 = (parent2.isWinner && !parent2.isEliminated) ? 2.2 : 1.2;
+      const width2 = (parent2.isWinner && !parent2.isEliminated) ? 2.2 : 1.1;
 
       const jointColor = (child.team && !child.isEliminated) ? (TEAM_COLORS[child.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
-      const jointWidth = (child.team && !child.isEliminated) ? 2.2 : 1.2;
+      const jointWidth = (child.team && !child.isEliminated) ? 2.2 : 1.1;
 
       drawSeparatedBezierConnection(
         parent1.radius, parent1.angle, color1, width1,
@@ -274,7 +275,7 @@ function drawSeparatedBezierConnection(r1, angleA, col1, w1, r2, angleB, col2, w
 }
 
 // ============================================================
-// DESENHO DOS NÓS + TRATAMENTO DOS ELIMINADOS EM PRETO E BRANCO
+// DESENHO DOS NÓS COM PERDA DE COR NOS ELIMINADOS
 // ============================================================
 
 function drawNode(slot) {
@@ -284,15 +285,15 @@ function drawNode(slot) {
   const [x, y] = polar(radius, angle);
   const g = elNS('g', { 'data-match-id': matchId || '', style: 'cursor: pointer;' });
 
-  const nodeRadius = isWinner && !isEliminated ? 17 : 14;
+  const nodeRadius = isWinner && !isEliminated ? 16 : 13;
 
-  const nodeFill = isEliminated ? COLOR_INACTIVE_NODE : '#070709';
-  const nodeStroke = isEliminated ? '#222226' : (isWinner ? '#d9a531' : '#3d3d44');
+  const nodeFill = isEliminated ? COLOR_INACTIVE_NODE : '#060608';
+  const nodeStroke = isEliminated ? '#202024' : (isWinner ? '#cc9a18' : '#38383f');
   const nodeStrokeWidth = isWinner && !isEliminated ? 2.5 : 1;
 
   g.appendChild(elNS('circle', { cx: x, cy: y, r: nodeRadius, fill: nodeFill, stroke: nodeStroke, 'stroke-width': nodeStrokeWidth }));
 
-  if (team && team.code !== 'TBD') {
+  if (team && team.code && team.code !== 'TBD') {
     const countryCodeUpper = team.code.toUpperCase();
     const countryCodeLower = team.code.toLowerCase();
     
@@ -313,15 +314,16 @@ function drawNode(slot) {
       href: apiFlagUrl,
       preserveAspectRatio: 'xMidYMid slice',
       'clip-path': `url(#${clipId})`,
-      style: isEliminated ? 'filter: grayscale(1) opacity(0.2);' : ''
+      // Deixa a bandeira em grayscale fosco idêntico ao poster original
+      style: isEliminated ? 'filter: grayscale(1) opacity(0.18);' : ''
     });
     g.appendChild(imgFlag);
 
-    // ESCUDOS EXTERNOS DA FEDERAÇÃO (Apenas Round 0)
+    // ESCUDOS EXTERNOS DAS FEDERAÇÕES (Apenas Round Inicial)
     if (round === 0) {
-      const shieldDistance = radius + 28; 
+      const shieldDistance = radius + 26; 
       const [sx, sy] = polar(shieldDistance, angle);
-      const shieldSize = 24; 
+      const shieldSize = 22; 
 
       const imgFederation = elNS('image', {
         x: sx - shieldSize / 2,
@@ -329,20 +331,20 @@ function drawNode(slot) {
         width: shieldSize,
         height: shieldSize,
         href: localShieldUrl, 
-        style: isEliminated ? 'filter: grayscale(1) opacity(0.15);' : ''
+        style: isEliminated ? 'filter: grayscale(1) opacity(0.12);' : ''
       });
 
       imgFederation.onerror = () => imgFederation.remove();
       svgLayer.appendChild(imgFederation);
       
-      const [lx, ly] = polar(radius + 14, angle);
+      const [lx, ly] = polar(radius + 13, angle);
       svgLayer.appendChild(elNS('line', {
         x1: lx, y1: ly, x2: sx, y2: sy,
-        stroke: isEliminated ? '#222226' : '#33333a', 'stroke-width': 1, 'stroke-dasharray': '2,2'
+        stroke: isEliminated ? '#1c1c20' : '#2d2d34', 'stroke-width': 1, 'stroke-dasharray': '2,2'
       }));
     }
   } else {
-    const t = elNS('text', { x, y: y + 3, 'text-anchor': 'middle', 'font-size': 8, fill: '#333338', 'font-weight': 'bold', 'font-family': 'sans-serif' });
+    const t = elNS('text', { x, y: y + 3, 'text-anchor': 'middle', 'font-size': 7, fill: '#2d2d33', 'font-weight': 'bold', 'font-family': 'sans-serif' });
     t.textContent = 'TBD';
     g.appendChild(t);
   }
@@ -358,7 +360,7 @@ function drawNode(slot) {
 }
 
 // ============================================================
-// FUNÇÕES AUXILIARES DE SUPORTE
+// AUXILIARES DE SUPORTE STANDARD
 // ============================================================
 
 function polar(r, a) {
@@ -378,22 +380,22 @@ function clearSVG() {
 function drawBackground() {
   const defs = elNS('defs', { id: 'defs' });
   const grad = elNS('radialGradient', { id: 'bgGlow', cx: '50%', cy: '50%', r: '55%' });
-  grad.appendChild(elNS('stop', { offset: '0%', 'stop-color': '#14120e' }));
-  grad.appendChild(elNS('stop', { offset: '70%', 'stop-color': '#060608' }));
-  grad.appendChild(elNS('stop', { offset: '100%', 'stop-color': '#020203' }));
+  grad.appendChild(elNS('stop', { offset: '0%', 'stop-color': '#110f0c' }));
+  grad.appendChild(elNS('stop', { offset: '70%', 'stop-color': '#050506' }));
+  grad.appendChild(elNS('stop', { offset: '100%', 'stop-color': '#010102' }));
   defs.appendChild(grad);
   svgLayer.appendChild(defs);
   svgLayer.appendChild(elNS('rect', { x: 0, y: 0, width: 1200, height: 1000, fill: 'url(#bgGlow)' }));
 
   LEVEL_R.forEach((r) => {
-    svgLayer.appendChild(elNS('circle', { cx: CX, cy: CY, r, fill: 'none', stroke: '#0e0e11', 'stroke-width': 1 }));
+    svgLayer.appendChild(elNS('circle', { cx: CX, cy: CY, r, fill: 'none', stroke: '#0a0a0c', 'stroke-width': 1 }));
   });
 }
 
 function drawTrophy() {
   const g = elNS('g');
-  g.appendChild(elNS('circle', { cx: CX, cy: CY, r: 52, fill: '#020203', stroke: '#1c170d', 'stroke-width': 1.5 }));
-  const t = elNS('text', { x: CX, y: CY + 12, 'text-anchor': 'middle', 'font-size': 42, fill: '#d9a531' });
+  g.appendChild(elNS('circle', { cx: CX, cy: CY, r: 52, fill: '#010102', stroke: '#18140b', 'stroke-width': 1.5 }));
+  const t = elNS('text', { x: CX, y: CY + 12, 'text-anchor': 'middle', 'font-size': 42, fill: '#cc9a18' });
   t.textContent = '🏆';
   g.appendChild(t);
   svgLayer.appendChild(g);
