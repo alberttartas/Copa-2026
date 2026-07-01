@@ -1,5 +1,5 @@
 // ============================================================
-// BRACKET CIRCULAR – GEOMETRIA ESPELHADA & IMAGENS DINÂMICAS
+// BRACKET CIRCULAR – RENDER COMPLETO COM ESCUDOS EXTERNOS
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -25,17 +25,15 @@ const state = {
 };
 
 // ---------- CONSTANTS ----------
-const CX = 600,
-  CY = 500;
+const CX = 600, CY = 500;
 const LEVEL_R = [420, 360, 300, 240, 180, 120];
-const COLORS = [
-  '#e6484f', '#3ddc84', '#f0c23d', '#4ea1f7',
-  '#b768e0', '#ff9f53', '#2ec4b6', '#ff6f91',
-];
-const GREY = '#3c3c40';
+
+// Cor única cinza escuro/bronzeada para conexões para eliminar as linhas coloridas
+const LINE_COLOR = '#3a3a3e'; 
+const GREY = '#222226';
 
 // ============================================================
-// LAYOUT ESPELHADA (IDÊNTICO À REFERÊNCIA)
+// GEOMETRIA ESPELHADA EXATA
 // ============================================================
 
 function buildFixedLayout(totalLeaves) {
@@ -46,21 +44,20 @@ function buildFixedLayout(totalLeaves) {
     layout.push([]);
   }
 
-  // ---------- ROUND 0 (FOLHAS) – DIVISÃO EM DOIS HEMISFÉRIOS ----------
   const half = totalLeaves / 2;
 
+  // Distribuição precisa dividida em Esquerda e Direita (com abertura vertical)
   for (let i = 0; i < totalLeaves; i++) {
     let angle;
-    
     if (i < half) {
-      // 🟩 HEMISFÉRIO ESQUERDO (Avança da esquerda para o centro)
+      // Hemisfério Esquerdo (Vira para o centro a partir da esquerda)
       const percent = i / (half - 1);
-      angle = Math.PI + (Math.PI / 1.25) * (percent - 0.5);
+      angle = Math.PI + (Math.PI / 1.35) * (percent - 0.5);
     } else {
-      // 🟨 HEMISFÉRIO DIREITO (Avança da direita para o centro)
+      // Hemisfério Direito (Vira para o centro a partir da direita)
       const idx = i - half;
       const percent = idx / (half - 1);
-      angle = (Math.PI / 1.25) * (0.5 - percent);
+      angle = (Math.PI / 1.35) * (0.5 - percent);
     }
 
     const radius = LEVEL_R[0];
@@ -73,7 +70,6 @@ function buildFixedLayout(totalLeaves) {
       radius,
       team: null,
       matchId: null,
-      colorIndex: i % COLORS.length,
       isPending: true,
       isWinner: false,
       x: CX + radius * Math.sin(angle),
@@ -81,7 +77,7 @@ function buildFixedLayout(totalLeaves) {
     });
   }
 
-  // ---------- ROUNDS SEGUINTES – CAMINHO RADIAL PERFEITO ----------
+  // Gera os rounds internos calculando o centro radial geométrico perfeito
   for (let r = 1; r < totalRounds; r++) {
     const prevLayer = layout[r - 1];
     const count = prevLayer.length / 2;
@@ -90,8 +86,6 @@ function buildFixedLayout(totalLeaves) {
     for (let i = 0; i < count; i++) {
       const parent1 = prevLayer[i * 2];
       const parent2 = prevLayer[i * 2 + 1];
-
-      // Média geométrica simples e segura por hemisfério
       const angle = (parent1.angle + parent2.angle) / 2;
 
       layout[r].push({
@@ -102,7 +96,6 @@ function buildFixedLayout(totalLeaves) {
         radius,
         team: null,
         matchId: null,
-        colorIndex: parent1.colorIndex, // Mantém a cor da ramificação original
         isPending: true,
         isWinner: false,
         x: CX + radius * Math.sin(angle),
@@ -115,31 +108,37 @@ function buildFixedLayout(totalLeaves) {
 }
 
 // ============================================================
-// MAPEAMENTO API → SLOTS (POR ASSOCIAÇÃO 1:1 ESTRITA)
+// MAPEAMENTO INTELIGENTE (PROCURA CONEXÕES DIRETAS POR TIME)
 // ============================================================
 
 function mapApiToSlots(leaves, rounds) {
   const totalLeaves = leaves.length || 32;
   const layout = buildFixedLayout(totalLeaves);
 
-  // 1. Popula o Round 0 (Folhas)
+  // 1. Aloca os times iniciais na primeira camada
   const leafSlots = layout[0] || [];
   for (let i = 0; i < leaves.length && i < leafSlots.length; i++) {
-    const slot = leafSlots[i];
-    slot.team = leaves[i];
-    slot.isPending = false;
-    slot.isWinner = false;
+    leafSlots[i].team = leaves[i];
+    leafSlots[i].isPending = false;
   }
 
-  // 2. Popula os Rounds Seguintes por Índice Linear Direto da Árvore Binária
+  // 2. Resolve as camadas internas procurando dinamicamente quem cruzou com quem
   for (let ri = 0; ri < rounds.length; ri++) {
     const round = rounds[ri];
     const matches = round.matches || [];
+    const currentLayer = layout[ri];
     const nextLayer = layout[ri + 1] || [];
 
     for (let i = 0; i < nextLayer.length; i++) {
-      const slot = nextLayer[i];
-      const match = matches[i];
+      const slotFilho = nextLayer[i];
+      const pai1 = currentLayer[i * 2];
+      const pai2 = currentLayer[i * 2 + 1];
+
+      // Busca na API o confronto correspondente a esses dois nós anteriores
+      const match = matches.find(m => 
+        (m.home?.id && (m.home.id === pai1.team?.id || m.home.id === pai2.team?.id)) ||
+        (m.away?.id && (m.away.id === pai1.team?.id || m.away.id === pai2.team?.id))
+      ) || matches[i]; // Fallback estrutural estruturado caso a partida não tenha ocorrido
 
       if (match) {
         let winner = null;
@@ -149,22 +148,16 @@ function mapApiToSlots(leaves, rounds) {
           decided = true;
           winner = match.home?.id === match.winnerId ? match.home : match.away;
         } else if (match.status === 'FINISHED' && match.score) {
-          const h = match.score?.home ?? 0;
-          const a = match.score?.away ?? 0;
+          const h = match.score.home ?? 0;
+          const a = match.score.away ?? 0;
           if (h > a) { decided = true; winner = match.home; } 
           else if (a > h) { decided = true; winner = match.away; }
-          else if (match.score?.penalties) {
-            const ph = match.score.penalties?.home ?? 0;
-            const pa = match.score.penalties?.away ?? 0;
-            if (ph > pa) { decided = true; winner = match.home; } 
-            else if (pa > ph) { decided = true; winner = match.away; }
-          }
         }
 
-        slot.team = winner || null;
-        slot.isPending = !decided;
-        slot.matchId = match.fixtureId;
-        slot.isWinner = decided;
+        slotFilho.team = winner || null;
+        slotFilho.isPending = !decided;
+        slotFilho.matchId = match.fixtureId;
+        slotFilho.isWinner = decided;
       }
     }
   }
@@ -173,7 +166,7 @@ function mapApiToSlots(leaves, rounds) {
 }
 
 // ============================================================
-// RENDER SVG
+// RENDER PRINCIPAL
 // ============================================================
 
 function render() {
@@ -190,48 +183,31 @@ function render() {
   drawBackground();
   drawFixedConnections(layout);
 
-  // Renderizar os nós com imagens
+  // Desenha os nós e as federações adjacentes
   for (const layer of layout) {
     for (const slot of layer) {
-      const team = slot.team;
-      const isPending = slot.isPending || !team;
-      const isWinner = slot.isWinner;
-      const color = isPending ? GREY : COLORS[slot.colorIndex % COLORS.length];
-
-      drawNode(
-        team || { code: 'TBD', name: 'TBD', id: null },
-        slot.radius,
-        slot.angle,
-        color,
-        isPending,
-        slot.matchId,
-        isWinner
-      );
+      drawNode(slot);
     }
   }
 
   drawTrophy();
 
   if (statusText) {
-    const ts = state.updatedAt
-      ? new Date(state.updatedAt).toLocaleString('pt-BR')
-      : 'agora';
+    const ts = state.updatedAt ? new Date(state.updatedAt).toLocaleString('pt-BR') : 'agora';
     statusText.textContent = `✅ Atualizado ${ts}`;
   }
 }
 
 // ============================================================
-// CONEXÕES FIXAS
+// CONEXÕES PADRONIZADAS (SEM LINHAS COLORIDAS)
 // ============================================================
 
 function drawFixedConnections(layout) {
   for (let r = 0; r < layout.length - 1; r++) {
     const currentLayer = layout[r];
     const nextLayer = layout[r + 1];
-
     if (!currentLayer || !nextLayer) continue;
 
-    const r1 = LEVEL_R[r] || LEVEL_R[0];
     const rMid = (LEVEL_R[r] + LEVEL_R[r + 1]) / 2;
 
     for (let i = 0; i < currentLayer.length; i += 2) {
@@ -241,29 +217,20 @@ function drawFixedConnections(layout) {
 
       if (!parent1 || !parent2 || !child) continue;
 
-      const color = COLORS[child.colorIndex % COLORS.length];
+      // Se o nó já avançou e venceu, podemos dar destaque sutil na linha, senão usa cor opaca padrão
+      const activeColor = (!child.isPending && child.team) ? '#d9a531' : LINE_COLOR;
 
       drawBezierConnection(
-        parent1.radius,
-        parent1.angle,
-        parent2.radius,
-        parent2.angle,
-        rMid,
-        child.angle,
-        child.radius,
-        color
+        parent1.radius, parent1.angle,
+        parent2.radius, parent2.angle,
+        rMid, child.angle, child.radius,
+        activeColor
       );
     }
   }
 }
 
-// ============================================================
-// CURVAS BÉZIER RADIAIS
-// ============================================================
-
 function drawBezierConnection(r1, angleA, r2, angleB, rMid, childAngle, rChild, color) {
-  if (!isFinite(angleA) || !isFinite(angleB) || !isFinite(childAngle)) return;
-
   const [x1, y1] = polar(r1, angleA);
   const [x2, y2] = polar(r1, angleB);
   const [cx, cy] = polar(rMid, childAngle);
@@ -272,126 +239,99 @@ function drawBezierConnection(r1, angleA, r2, angleB, rMid, childAngle, rChild, 
   const midX = (x1 + x2) / 2;
   const midY = (y1 + y2) / 2;
 
-  const path1 = elNS('path', {
-    d: `M${x1},${y1} Q${midX},${midY} ${cx},${cy}`,
-    stroke: color || '#4b5563',
-    fill: 'none',
-    'stroke-width': 2,
-    'stroke-linecap': 'round',
-  });
-  svgLayer.appendChild(path1);
-
-  const path2 = elNS('path', {
-    d: `M${cx},${cy} Q${midX},${midY} ${x2},${y2}`,
-    stroke: color || '#4b5563',
-    fill: 'none',
-    'stroke-width': 2,
-    'stroke-linecap': 'round',
-  });
-  svgLayer.appendChild(path2);
-
-  const path3 = elNS('path', {
-    d: `M${cx},${cy} L${cx2},${cy2}`,
-    stroke: color || '#4b5563',
-    fill: 'none',
-    'stroke-width': 2,
-    'stroke-linecap': 'round',
-  });
-  svgLayer.appendChild(path3);
+  svgLayer.appendChild(elNS('path', { d: `M${x1},${y1} Q${midX},${midY} ${cx},${cy}`, stroke: color, fill: 'none', 'stroke-width': 1.5 }));
+  svgLayer.appendChild(elNS('path', { d: `M${cx},${cy} Q${midX},${midY} ${x2},${y2}`, stroke: color, fill: 'none', 'stroke-width': 1.5 }));
+  svgLayer.appendChild(elNS('path', { d: `M${cx},${cy} L${cx2},${cy2}`, stroke: color, fill: 'none', 'stroke-width': 1.5 }));
 }
 
 // ============================================================
-// NÓ COMPACTO (ESCUDO LOCAL COM FALLBACK PARA BANDEIRA API)
+// ADICIONA NÓS (COM ESCUDO DA FEDERAÇÃO NA PARTE EXTERNA)
 // ============================================================
 
-function drawNode(team, r, a, color, pending, matchId, isWinner) {
-  if (!isFinite(a)) return;
+function drawNode(slot) {
+  const { team, radius, angle, round, matchId, isWinner, isPending } = slot;
+  if (!isFinite(angle)) return;
 
-  const [x, y] = polar(r, a);
-  if (!isFinite(x) || !isFinite(y)) return;
-
+  const [x, y] = polar(radius, angle);
   const g = elNS('g', { 'data-match-id': matchId || '', style: 'cursor: pointer;' });
 
-  // Tamanhos ideais semelhantes ao mockup de referência
-  const radius = isWinner ? 19 : 15;
-  const strokeWidth = isWinner ? 3 : 1.5;
+  const nodeRadius = isWinner ? 18 : 14;
 
-  // Círculo de borda e fundo
+  // Círculo base para a bandeira/TBD
   g.appendChild(elNS('circle', {
-    cx: x,
-    cy: y,
-    r: radius,
-    fill: pending ? '#222' : color,
-    stroke: isWinner ? '#d9a531' : '#111',
-    'stroke-width': strokeWidth,
+    cx: x, cy: y, r: nodeRadius,
+    fill: isPending ? '#18181b' : '#111',
+    stroke: isWinner ? '#d9a531' : '#3f3f46',
+    'stroke-width': isWinner ? 2.5 : 1,
   }));
 
-  if (!pending && team && team.code !== 'TBD') {
+  if (team && team.code !== 'TBD') {
     const countryCode = team.code.toLowerCase();
-    
-    // Caminhos de imagem definidos
+    const apiFlagUrl = team.flag || `https://flagcdn.com/${countryCode === 'ger' ? 'de' : countryCode.substring(0, 2)}.svg`;
     const localShieldUrl = `assets/img/federations/${countryCode}.svg`;
-    const apiFlagUrl = team.flag || `https://flagcdn.com/${countryCode === 'ger' ? 'de' : countryCode.substring(0,2)}.svg`;
 
-    // Criação da Máscara de Recorte Circular (ClipPath)
-    const clipId = `clip-${countryCode}-${r}-${Math.floor(Math.abs(a)*100)}`;
+    // 1. Recorte circular interno para a BANDEIRA
+    const clipId = `clip-${round}-${slot.index}-${countryCode}`;
     const clipPath = elNS('clipPath', { id: clipId });
-    clipPath.appendChild(elNS('circle', { cx: x, cy: y, r: radius - 0.5 }));
+    clipPath.appendChild(elNS('circle', { cx: x, cy: y, r: nodeRadius - 0.5 }));
     svgLayer.appendChild(clipPath);
 
-    // Elemento da Imagem
-    const img = elNS('image', {
-      x: x - radius,
-      y: y - radius,
-      width: radius * 2,
-      height: radius * 2,
-      href: localShieldUrl, // Tenta primeiro o Escudo da Federação Local
+    const imgFlag = elNS('image', {
+      x: x - nodeRadius, y: y - nodeRadius,
+      width: nodeRadius * 2, height: nodeRadius * 2,
+      href: apiFlagUrl,
       preserveAspectRatio: 'xMidYMid slice',
       'clip-path': `url(#${clipId})`
     });
+    g.appendChild(imgFlag);
 
-    // Fallback estratégico: se o arquivo .svg local não existir, renderiza a flag da API
-    img.onerror = () => {
-      img.setAttribute('href', apiFlagUrl);
-    };
+    // 2. SE FOR O ROUND 0 (PRIMEIRA CAMADA EXTErNA): Desenha o escudo da federação do lado de fora!
+    if (round === 0) {
+      // Empurra o escudo ligeiramente mais para fora radialmente (+32px de distância)
+      const shieldRadius = radius + 32; 
+      const [sx, sy] = polar(shieldRadius, angle);
+      const shieldSize = 26; // Dimensão ideal para o escudo em SVG
 
-    g.appendChild(img);
+      const imgFederation = elNS('image', {
+        x: sx - shieldSize / 2,
+        y: sy - shieldSize / 2,
+        width: shieldSize,
+        height: shieldSize,
+        href: localShieldUrl,
+      });
+
+      // Se não houver arquivo local na pasta, oculta sutilmente para não quebrar o layout
+      imgFederation.onerror = () => imgFederation.remove();
+      svgLayer.appendChild(imgFederation);
+      
+      // Linha guia sutil conectando o escudo ao círculo da bandeira
+      const [lx, ly] = polar(radius + 14, angle);
+      svgLayer.appendChild(elNS('line', {
+        x1: lx, y1: ly, x2: sx, y2: sy,
+        stroke: '#333336', 'stroke-width': 1, 'stroke-dasharray': '2,2'
+      }));
+    }
+
   } else {
-    // Texto TBD discreto interno para nós vazios
-    const t = elNS('text', {
-      x,
-      y: y + 3,
-      'text-anchor': 'middle',
-      'font-size': 8,
-      fill: '#555',
-      'font-weight': 'bold',
-      'font-family': 'sans-serif'
-    });
+    // Texto TBD minimalista interno
+    const t = elNS('text', { x, y: y + 3, 'text-anchor': 'middle', 'font-size': 8, fill: '#444', 'font-weight': 'bold' });
     t.textContent = 'TBD';
     g.appendChild(t);
   }
 
-  // ---------- MOUSE INTERACTION ----------
+  // Interação do Mouse
   g.onmouseenter = (e) => {
     const rect = svgLayer.getBoundingClientRect();
-    state.hover = {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-      matchId,
-    };
+    state.hover = { x: e.clientX - rect.left, y: e.clientY - rect.top, matchId };
     renderUI();
   };
-
-  g.onmouseleave = () => {
-    state.hover = null;
-    renderUI();
-  };
+  g.onmouseleave = () => { state.hover = null; renderUI(); };
 
   svgLayer.appendChild(g);
 }
 
 // ============================================================
-// HELPER FUNCTIONS
+// HELPER FUNCTIONS & INFRASTRUCTURE
 // ============================================================
 
 function polar(r, a) {
@@ -411,34 +351,29 @@ function clearSVG() {
 function drawBackground() {
   const defs = elNS('defs', { id: 'defs' });
   const grad = elNS('radialGradient', { id: 'bgGlow', cx: '50%', cy: '50%', r: '55%' });
-  grad.appendChild(elNS('stop', { offset: '0%', 'stop-color': '#2a2210' }));
-  grad.appendChild(elNS('stop', { offset: '60%', 'stop-color': '#11100d' }));
-  grad.appendChild(elNS('stop', { offset: '100%', 'stop-color': '#070708' }));
+  grad.appendChild(elNS('stop', { offset: '0%', 'stop-color': '#221a0b' }));
+  grad.appendChild(elNS('stop', { offset: '60%', 'stop-color': '#0d0d0f' }));
+  grad.appendChild(elNS('stop', { offset: '100%', 'stop-color': '#060607' }));
   defs.appendChild(grad);
   svgLayer.appendChild(defs);
   svgLayer.appendChild(elNS('rect', { x: 0, y: 0, width: 1200, height: 1000, fill: 'url(#bgGlow)' }));
 
   LEVEL_R.forEach((r) => {
-    svgLayer.appendChild(elNS('circle', { cx: CX, cy: CY, r, fill: 'none', stroke: '#1f1f23', 'stroke-width': 1 }));
+    svgLayer.appendChild(elNS('circle', { cx: CX, cy: CY, r, fill: 'none', stroke: '#151518', 'stroke-width': 1 }));
   });
 }
 
 function drawTrophy() {
   const g = elNS('g');
-  g.appendChild(elNS('circle', { cx: CX, cy: CY, r: 52, fill: '#070708', stroke: '#2a2210', 'stroke-width': 2 }));
+  g.appendChild(elNS('circle', { cx: CX, cy: CY, r: 52, fill: '#070708', stroke: '#2a2210', 'stroke-width': 1.5 }));
   const t = elNS('text', { x: CX, y: CY + 12, 'text-anchor': 'middle', 'font-size': 42, fill: '#d9a531' });
   t.textContent = '🏆';
   g.appendChild(t);
   svgLayer.appendChild(g);
 }
 
-// ============================================================
-// UI TOOLTIP & PANEL HANDLERS
-// ============================================================
-
 function renderUI() {
   if (!tooltipEl || !panelEl) return;
-
   const hover = state.hover;
 
   if (!hover) {
@@ -461,93 +396,34 @@ function renderUI() {
 
   const home = match.home?.name || 'TBD';
   const away = match.away?.name || 'TBD';
-  const score = match.status === 'FINISHED'
-    ? `${match.score?.home ?? 0} – ${match.score?.away ?? 0}`
-    : match.isLive ? 'AO VIVO' : 'VS';
-  const stage = match.stage || 'Fase eliminatória';
-  const date = match.date ? new Date(match.date).toLocaleDateString('pt-BR') : '--/--';
-  const time = match.date ? new Date(match.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+  const score = match.status === 'FINISHED' ? `${match.score?.home ?? 0} – ${match.score?.away ?? 0}` : 'VS';
+  const stage = match.stage || 'Fase Eliminatória';
 
-  const winner = match.winnerId != null
-    ? (match.home?.id === match.winnerId ? match.home : match.away)
-    : null;
-  const winnerName = winner?.name || '';
-
-  tooltipEl.innerHTML = `
-    <div><strong>${home}</strong> vs <strong>${away}</strong></div>
-    <div class="score">${score}</div>
-    <div class="detail">🏆 ${stage}</div>
-    <div class="detail">📅 ${date} • 🕘 ${time}</div>
-    ${match.isLive ? '<div class="detail live">🔴 AO VIVO</div>' : ''}
-  `;
-
+  tooltipEl.innerHTML = `<div><strong>${home}</strong> vs <strong>${away}</strong></div><div class="score">${score}</div>`;
   tooltipEl.style.transform = `translate3d(${hover.x + 16}px, ${hover.y + 16}px, 0)`;
   tooltipEl.classList.add('visible');
 
-  panelEl.innerHTML = `
-    <div class="match-title">
-      <span>${home}</span>
-      <span style="color:#6b7280;margin:0 4px;">vs</span>
-      <span>${away}</span>
-    </div>
-    <div class="match-score">${score}</div>
-    <div class="match-detail">
-      🏆 ${stage}
-      ${winnerName ? ` — 🏅 <strong style="color:#d9a531;">${winnerName}</strong>` : ''}
-    </div>
-    <div class="match-detail">📅 ${date} • 🕘 ${time}</div>
-    ${match.isLive ? '<div class="match-detail live">🔴 AO VIVO</div>' : ''}
-  `;
-
+  panelEl.innerHTML = `<div class="match-title">${home} vs ${away}</div><div class="match-score">${score}</div><div class="match-detail">🏆 ${stage}</div>`;
   panelEl.classList.add('visible');
 }
 
-// ============================================================
-// DATA DESPATCHER (ANTI-RACE)
-// ============================================================
-
-let requestId = 0;
-
 async function load() {
-  const id = ++requestId;
   state.loading = true;
-
   if (statusText) statusText.textContent = 'Atualizando...';
-
   try {
     const res = await fetch('/api/bracket', { cache: 'no-store' });
     const data = await res.json();
-
-    if (id !== requestId) return;
-
     state.rounds = data.rounds || [];
     state.leaves = data.leaves || [];
     state.updatedAt = data.updatedAt || null;
-
     render();
-    renderUI();
-
-    if (statusText) {
-      const ts = state.updatedAt
-        ? new Date(state.updatedAt).toLocaleString('pt-BR')
-        : 'agora';
-      statusText.textContent = `✅ Atualizado ${ts}`;
-    }
   } catch (e) {
-    console.error(e);
     if (statusText) statusText.textContent = '❌ Erro ao carregar';
   } finally {
     state.loading = false;
   }
 }
 
-if (refreshBtn) {
-  refreshBtn.addEventListener('click', () => {
-    if (!state.loading) load();
-  });
-}
-
+if (refreshBtn) refreshBtn.addEventListener('click', load);
 load();
 setInterval(load, 90000);
-
-console.log('🏆 Chaveamento de Copa do Mundo estruturado com sucesso.');
