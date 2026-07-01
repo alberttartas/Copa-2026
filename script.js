@@ -34,6 +34,35 @@ const TEAM_COLORS = {
   GER: '#d1d1d1', POR: '#991116', ESP: '#bd1117', USA: '#042247'
 };
 
+// ============================================================
+// ORDEM FIXA DOS 32 SLOTS — bracket oficial real da Copa 2026
+// Índice = posição no círculo (bate 1:1 com INDEX_GEOMETRY_MAP).
+// Índices 0–15 = metade esquerda (de baixo pra cima)
+// Índices 16–31 = metade direita (de cima pra baixo)
+//
+// Cada bloco de 4 códigos é um "quarto" que fecha em si mesmo
+// (2 jogos das oitavas-de-32 -> 1 jogo das oitavas-de-16),
+// e cada bloco de 8 é um quarto completo (-> 1 vaga de quartas),
+// exatamente como no chaveamento oficial:
+//   Q1 (esq-cima):  SAF/CAN, NED/MAR, GER/PAR, FRA/SWE
+//   Q3 (esq-baixo): BEL/SEN, USA/BIH, ESP/AUT, POR/CRO
+//   Q2 (dir-cima):  BRA/JPN, CIV/NOR, MEX/ECU, ENG/COD
+//   Q4 (dir-baixo): AUS/EGY, ARG/CPV, SUI/ALG, COL/GHA
+// ============================================================
+const POSITION_ORDER = [
+  // ---- ESQUERDA (pos 0 = baixo ... pos 15 = topo) ----
+  'BEL', 'SEN', 'USA', 'BIH',   // pos 0-3  (Bélgica/Senegal, EUA/Bósnia)
+  'ESP', 'AUT', 'POR', 'CRO',   // pos 4-7  (Espanha/Áustria, Portugal/Croácia)
+  'RSA', 'CAN', 'NED', 'MAR',   // pos 8-11 (África do Sul/Canadá, Holanda/Marrocos)
+  'GER', 'PAR', 'FRA', 'SWE',   // pos 12-15 (Alemanha/Paraguai, França/Suécia)
+
+  // ---- DIREITA (pos 0 = topo ... pos 15 = baixo) ----
+  'BRA', 'JPN', 'CIV', 'NOR',   // pos 0-3  (Brasil/Japão, Costa do Marfim/Noruega)
+  'MEX', 'ECU', 'ENG', 'COD',   // pos 4-7  (México/Equador, Inglaterra/Congo)
+  'AUS', 'EGY', 'ARG', 'CPV',   // pos 8-11 (Austrália/Egito, Argentina/Cabo Verde)
+  'SUI', 'ALG', 'COL', 'GHA',   // pos 12-15 (Suíça/Argélia, Colômbia/Gana)
+];
+
 // Mapeamento de ângulos fixo (Metade Esquerda e Metade Direita)
 const INDEX_GEOMETRY_MAP = {
   0:  { side: 'left',  pos: 0  }, 1:  { side: 'left',  pos: 1  },
@@ -105,65 +134,47 @@ function buildFixedLayout() {
 }
 
 // ============================================================
-// CONVERSOR GEOMÉTRICO RETIFICADO POR CÓDIGO DE PAÍS
+// CONVERSOR: POSIÇÃO FIXA (POSITION_ORDER) <- DADOS DA API
 // ============================================================
 function mapApiToSlots() {
   const layout = buildFixedLayout();
   const round0Matches = state.rounds[0]?.matches || [];
 
-  const orderedMatches = new Array(16);
-
-  round0Matches.forEach(match => {
-    const home = match.home?.code?.toUpperCase();
-    const away = match.away?.code?.toUpperCase();
-
-    // --- METADE ESQUERDA ---
-    if (home === 'GER' || away === 'GER') orderedMatches[0] = match;
-    else if (home === 'FRA' || away === 'FRA') orderedMatches[1] = match;
-    else if ((home === 'NOR' || away === 'NOR') && (home !== 'BRA' && away !== 'BRA')) {
-      orderedMatches[2] = match; 
-    }
-    else if (home === 'MAR' || away === 'MAR') orderedMatches[3] = match;
-    else if (home === 'POR' || away === 'POR') orderedMatches[4] = match;
-    else if (home === 'ESP' || away === 'ESP') orderedMatches[5] = match;
-    else if (home === 'USA' || away === 'USA') orderedMatches[6] = match;
-    else if (home === 'BEL' || away === 'BEL') orderedMatches[7] = match;
-
-    // --- METADE DIREITA ---
-    else if (home === 'BRA' || away === 'BRA') orderedMatches[8] = match; // Brasil no topo direito!
-    else if (home === 'MEX' || away === 'MEX') orderedMatches[10] = match;
-    else if (home === 'ENG' || away === 'ENG') orderedMatches[11] = match;
-    else if (home === 'ARG' || away === 'ARG') orderedMatches[12] = match;
-    else if (home === 'AUS' || away === 'AUS') orderedMatches[13] = match;
-    else if (home === 'SUI' || away === 'SUI') orderedMatches[14] = match;
-    else if (home === 'GHA' || away === 'GHA') orderedMatches[15] = match;
-  });
-
-  let fallbackIdx = 0;
-  for (let i = 0; i < 16; i++) {
-    if (!orderedMatches[i]) {
-      while (fallbackIdx < round0Matches.length && orderedMatches.includes(round0Matches[fallbackIdx])) {
-        fallbackIdx++;
-      }
-      if (fallbackIdx < round0Matches.length) {
-        orderedMatches[i] = round0Matches[fallbackIdx];
-      }
-    }
+  // Índice code -> { team, match } a partir de TODOS os jogos das oitavas-de-32
+  const teamByCode = {};
+  for (const match of round0Matches) {
+    const homeCode = match.home?.code?.toUpperCase();
+    const awayCode = match.away?.code?.toUpperCase();
+    if (homeCode) teamByCode[homeCode] = { team: match.home, match };
+    if (awayCode) teamByCode[awayCode] = { team: match.away, match };
   }
+
+  // Times da API que não bateram com nenhum código de POSITION_ORDER
+  // (ex: mudança de qualificação) caem aqui e preenchem os slots vazios
+  // restantes, na ordem em que vierem, para nunca deixar buraco no bracket.
+  const usedCodes = new Set();
+  const leftoverEntries = [];
+  for (const code in teamByCode) {
+    if (!POSITION_ORDER.includes(code)) leftoverEntries.push(teamByCode[code]);
+  }
+  let leftoverIdx = 0;
 
   for (let i = 0; i < layout[0].length; i++) {
     const slot = layout[0][i];
-    const matchIdx = Math.floor(i / 2);
-    const match = orderedMatches[matchIdx];
+    const wantedCode = POSITION_ORDER[i];
+    let entry = teamByCode[wantedCode];
 
-    if (match) {
-      const actualTeam = (i % 2 === 0) ? match.home : match.away;
-      if (actualTeam) {
-        slot.team = actualTeam;
-        slot.matchId = match.fixtureId;
-        if (match.status === 'FINISHED' && match.winnerId && match.winnerId !== actualTeam.id) {
-          slot.isEliminated = true;
-        }
+    if (!entry && leftoverIdx < leftoverEntries.length) {
+      entry = leftoverEntries[leftoverIdx++];
+    }
+
+    if (entry) {
+      usedCodes.add(entry.team?.code?.toUpperCase());
+      slot.team = entry.team;
+      slot.matchId = entry.match.fixtureId;
+      const match = entry.match;
+      if (match.status === 'FINISHED' && match.winnerId && match.winnerId !== entry.team.id) {
+        slot.isEliminated = true;
       }
     }
   }
@@ -311,7 +322,14 @@ function drawNode(slot) {
     const countryCodeUpper = team.code.toUpperCase();
     const countryCodeLower = team.code.toLowerCase();
     
-    const isoMap = { bra: 'br', fra: 'fr', ger: 'de', esp: 'es', arg: 'ar', can: 'ca', mex: 'mx', usa: 'us', eng: 'gb-eng', nor: 'no', por: 'pt', ita: 'it', jpn: 'jp', mar: 'ma', sui: 'ch', egy: 'eg', gha: 'gh', col: 'co', bel: 'be', sen: 'sn', cro: 'hr', aut: 'at', bih: 'ba', pan: 'pa', rsa: 'za', par: 'py', tha: 'th', ecu: 'ec', civ: 'ci', cpv: 'cv', aus: 'au', irq: 'iq', alg: 'dz' };
+    const isoMap = {
+      bra: 'br', fra: 'fr', ger: 'de', esp: 'es', arg: 'ar', can: 'ca', mex: 'mx', usa: 'us',
+      eng: 'gb-eng', nor: 'no', por: 'pt', ita: 'it', jpn: 'jp', mar: 'ma', sui: 'ch', egy: 'eg',
+      gha: 'gh', col: 'co', bel: 'be', sen: 'sn', cro: 'hr', aut: 'at', bih: 'ba', pan: 'pa',
+      rsa: 'za', par: 'py', tha: 'th', ecu: 'ec', civ: 'ci', cpv: 'cv', aus: 'au', irq: 'iq',
+      alg: 'dz', ned: 'nl', swe: 'se', cod: 'cd', jor: 'jo', qat: 'qa', ksa: 'sa', uae: 'ae',
+      uru: 'uy', uzb: 'uz', kor: 'kr', cur: 'cw', hai: 'ht', nzl: 'nz', tun: 'tn', irn: 'ir', tur: 'tr'
+    };
     const flag2Letter = isoMap[countryCodeLower] || countryCodeLower.substring(0, 2);
     
     const apiFlagUrl = `https://flagcdn.com/${flag2Letter}.svg`;
@@ -399,7 +417,7 @@ function drawBackground() {
 }
 
 // ============================================================
-// INJEÇÃO DA TAÇA EM GIF (SUBSTITUINDO O TEXTO ANTERIOR)
+// INJEÇÃO DA TAÇA EM GIF
 // ============================================================
 function drawTrophy() {
   const g = elNS('g');
