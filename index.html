@@ -695,18 +695,30 @@
     g.appendChild(el("circle", { cx: x, cy: y, r: size / 2 - 4, fill: "#222226" }));
   }
 
-  // Selo da confederação - CORRIGIDO para usar BRA.svg, GER.svg, etc.
+  // Selo da confederação - TAMANHO AUMENTADO
   if (!pending && team && team.code) {
     const conf = getConfederation(team.code);
     if (conf) {
-      const badgeSize = Math.max(11, Math.round(size * 0.34));
+      // AUMENTEI de 0.34 para 0.55
+      const badgeSize = Math.max(16, Math.round(size * 0.55));
       const angleRad = Math.atan2(y - CY, x - CX);
-      const offset = size / 2 + badgeSize / 2 + 3;
+      // AUMENTEI o offset para dar mais espaço
+      const offset = size / 2 + badgeSize / 2 + 6;
       const bx = x + Math.cos(angleRad) * offset;
       const by = y + Math.sin(angleRad) * offset;
       
-      // CORREÇÃO: usa o código do time (ex: "BRA.svg") em vez do nome da confederação
       const confPath = `/assets/img/federations/${team.code}.svg`;
+      
+      // Adiciona um fundo branco/escuro para melhor visibilidade
+      const bgCircle = el("circle", {
+        cx: bx,
+        cy: by,
+        r: badgeSize / 2 + 2,
+        fill: "#0b0b0c",
+        stroke: "rgba(255,255,255,0.1)",
+        "stroke-width": 1
+      });
+      g.appendChild(bgCircle);
       
       g.appendChild(el("image", {
         x: bx - badgeSize / 2,
@@ -716,7 +728,6 @@
         href: confPath,
         class: "conf-badge",
         preserveAspectRatio: "xMidYMid meet",
-        // Fallback caso a imagem não carregue
         onerror: "this.style.display='none'"
       }));
     }
