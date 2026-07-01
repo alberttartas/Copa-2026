@@ -36,18 +36,6 @@ const TEAM_COLORS = {
 
 // ============================================================
 // ORDEM FIXA DOS 32 SLOTS — bracket oficial real da Copa 2026
-// Índice = posição no círculo (bate 1:1 com INDEX_GEOMETRY_MAP).
-// Índices 0–15 = metade esquerda (de baixo pra cima)
-// Índices 16–31 = metade direita (de cima pra baixo)
-//
-// Cada bloco de 4 códigos é um "quarto" que fecha em si mesmo
-// (2 jogos das oitavas-de-32 -> 1 jogo das oitavas-de-16),
-// e cada bloco de 8 é um quarto completo (-> 1 vaga de quartas),
-// exatamente como no chaveamento oficial:
-//   Q1 (esq-cima):  SAF/CAN, NED/MAR, GER/PAR, FRA/SWE
-//   Q3 (esq-baixo): BEL/SEN, USA/BIH, ESP/AUT, POR/CRO
-//   Q2 (dir-cima):  BRA/JPN, CIV/NOR, MEX/ECU, ENG/COD
-//   Q4 (dir-baixo): AUS/EGY, ARG/CPV, SUI/ALG, COL/GHA
 // ============================================================
 const POSITION_ORDER = [
   // ---- ESQUERDA (pos 0 = baixo ... pos 15 = topo) ----
@@ -134,13 +122,12 @@ function buildFixedLayout() {
 }
 
 // ============================================================
-// CONVERSOR: POSIÇÃO FIXA (POSITION_ORDER) <- DADOS DA API
+// CONVERSOR: CORREÇÃO DE SUBIDA E HERANÇA CONTÍNUA
 // ============================================================
 function mapApiToSlots() {
   const layout = buildFixedLayout();
   const round0Matches = state.rounds[0]?.matches || [];
 
-  // Índice code -> { team, match } a partir de TODOS os jogos das oitavas-de-32
   const teamByCode = {};
   for (const match of round0Matches) {
     const homeCode = match.home?.code?.toUpperCase();
@@ -149,9 +136,6 @@ function mapApiToSlots() {
     if (awayCode) teamByCode[awayCode] = { team: match.away, match };
   }
 
-  // Times da API que não bateram com nenhum código de POSITION_ORDER
-  // (ex: mudança de qualificação) caem aqui e preenchem os slots vazios
-  // restantes, na ordem em que vierem, para nunca deixar buraco no bracket.
   const usedCodes = new Set();
   const leftoverEntries = [];
   for (const code in teamByCode) {
@@ -173,12 +157,18 @@ function mapApiToSlots() {
       slot.team = entry.team;
       slot.matchId = entry.match.fixtureId;
       const match = entry.match;
+      
+      // Define se o time foi eliminado logo na primeira rodada
       if (match.status === 'FINISHED' && match.winnerId && match.winnerId !== entry.team.id) {
         slot.isEliminated = true;
+      }
+      if (match.status === 'FINISHED' && match.winnerId && match.winnerId === entry.team.id) {
+        slot.isWinner = true;
       }
     }
   }
 
+  // Subida hierárquica corrigida para herdar os vencedores mesmo com delay da API
   for (let r = 1; r < layout.length; r++) {
     const currentLayer = layout[r];
     const prevLayer = layout[r - 1];
@@ -189,6 +179,7 @@ function mapApiToSlots() {
       const pai1 = prevLayer[i * 2];
       const pai2 = prevLayer[i * 2 + 1];
 
+      // Tenta acoplar a partida correspondente da rodada atual via IDs dos pais
       const match = currentRoundMatches.find(m => 
         (pai1.team?.id && (m.home?.id === pai1.team.id || m.away?.id === pai1.team.id)) ||
         (pai2.team?.id && (m.home?.id === pai2.team.id || m.away?.id === pai2.team.id))
@@ -209,9 +200,11 @@ function mapApiToSlots() {
 
         if (winner) {
           slotFilho.team = winner;
+          slotFilho.isWinner = true;
           if (pai1.team && pai1.team.id === winner.id) { pai1.isWinner = true; pai2.isEliminated = true; }
           if (pai2.team && pai2.team.id === winner.id) { pai2.isWinner = true; pai1.isEliminated = true; }
         } else {
+          // Se a partida está definida mas não finalizada, projeta na tela quem já chegou aqui
           if (match.home && (pai1.team?.id === match.home.id || pai2.team?.id === match.home.id)) {
              slotFilho.team = match.home;
           } else if (match.away && (pai1.team?.id === match.away.id || pai2.team?.id === match.away.id)) {
@@ -223,10 +216,15 @@ function mapApiToSlots() {
 
         if (match.status === 'FINISHED' && winner && slotFilho.team?.id !== winner.id) {
           slotFilho.isEliminated = true;
+          slotFilho.isWinner = false;
         }
       } else {
-        if (pai1.isWinner && !pai1.isEliminated) slotFilho.team = pai1.team;
-        else if (pai2.isWinner && !pai2.isEliminated) slotFilho.team = pai2.team;
+        // CORREÇÃO CIRÚRGICA: Se a API ainda não processou o nó superior, herda o nó pai vitorioso
+        if (pai1.isWinner && !pai1.isEliminated) {
+          slotFilho.team = pai1.team;
+        } else if (pai2.isWinner && !pai2.isEliminated) {
+          slotFilho.team = pai2.team;
+        }
       }
     }
   }
@@ -391,6 +389,7 @@ function polar(r, a) {
   return [CX + r * Math.sin(a), CY - r * Math.cos(a)];
 }
 
+// Elementos Namespace SVG
 function elNS(tag, attrs = {}) {
   const el = document.createElementNS(NS, tag);
   for (const k in attrs) el.setAttribute(k, attrs[k]);
@@ -421,11 +420,8 @@ function drawBackground() {
 // ============================================================
 function drawTrophy() {
   const g = elNS('g');
-  
-  // Mantém o círculo de fundo escuro com borda dourada estilizada do pôster
   g.appendChild(elNS('circle', { cx: CX, cy: CY, r: 52, fill: '#010102', stroke: '#18140b', 'stroke-width': 1.5 }));
   
-  // Renderiza o taca.gif centralizado na raiz do projeto
   const trophySize = 74; 
   g.appendChild(elNS('image', {
     x: CX - trophySize / 2,
