@@ -1,5 +1,5 @@
 // ============================================================
-// BRACKET CIRCULAR – COPA DO MUNDO 2026 (CORREÇÃO DE SUBIDA E CLONES)
+// BRACKET CIRCULAR – COPA DO MUNDO 2026 (PREENCHIMENTO TOTAL INTERNO)
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -105,12 +105,12 @@ function buildFixedLayout() {
 }
 
 // ============================================================
-// MAPEAMENTO RIGOROSO DA SUBIDA – FILTRAGEM ANTI-CLONE
+// MAPEAMENTO RIGOROSO DA SUBIDA – HERANÇA DIRETA DE SELEÇÕES
 // ============================================================
 function mapApiToSlots() {
   const layout = buildFixedLayout();
   
-  // 1. Preenche a primeira rodada (32 avos de final)
+  // 1. Preenche a primeira rodada (Anel Externo)
   const round0Matches = state.rounds[0]?.matches || [];
   for (let i = 0; i < layout[0].length; i++) {
     const slot = layout[0][i];
@@ -129,7 +129,7 @@ function mapApiToSlots() {
     }
   }
 
-  // 2. Transmissão estrita para os círculos internos (Oitavas, Quartas, Semis, Final)
+  // 2. Transmissão hierárquica contínua para os círculos internos
   for (let r = 1; r < layout.length; r++) {
     const currentLayer = layout[r];
     const prevLayer = layout[r - 1];
@@ -140,7 +140,7 @@ function mapApiToSlots() {
       const pai1 = prevLayer[i * 2];
       const pai2 = prevLayer[i * 2 + 1];
 
-      // Busca estrita: Apenas associa a partida se ela contiver os times REAIS vindo dos nós pais
+      // Busca a partida baseada estritamente nos IDs que vieram dos nós pais
       const match = currentRoundMatches.find(m => 
         (pai1.team?.id && (m.home?.id === pai1.team.id || m.away?.id === pai1.team.id)) ||
         (pai2.team?.id && (m.home?.id === pai2.team.id || m.away?.id === pai2.team.id))
@@ -160,16 +160,19 @@ function mapApiToSlots() {
         }
 
         if (winner) {
-          // O vencedor oficial assume o nó interno
           slotFilho.team = winner;
-          
           if (pai1.team && pai1.team.id === winner.id) { pai1.isWinner = true; pai2.isEliminated = true; }
           if (pai2.team && pai2.team.id === winner.id) { pai2.isWinner = true; pai1.isEliminated = true; }
         } else {
-          // Se o jogo não aconteceu ou está ativo/em aberto, não clona! Mantém limpo.
-          slotFilho.team = null;
-          
-          // Mantém as flags de visualização limpas para evitar nós fantasmas
+          // SE O JOGO NÃO TERMINOU: O nó assume o time que já está classificado vindo de baixo
+          // Isso garante a bandeira preenchida nas Oitavas/Quartas sem esperar o fim da rodada atual
+          if (match.home && (pai1.team?.id === match.home.id || pai2.team?.id === match.home.id)) {
+             slotFilho.team = match.home;
+          } else if (match.away && (pai1.team?.id === match.away.id || pai2.team?.id === match.away.id)) {
+             slotFilho.team = match.away;
+          }
+
+          // Ativa os caminhos visuais das linhas para os nós que subiram
           if (pai1.team && !pai1.isEliminated) pai1.isWinner = true;
           if (pai2.team && !pai2.isEliminated) pai2.isWinner = true;
         }
@@ -177,6 +180,10 @@ function mapApiToSlots() {
         if (match.status === 'FINISHED' && winner && slotFilho.team?.id !== winner.id) {
           slotFilho.isEliminated = true;
         }
+      } else {
+        // Fallback estrutural: Se a API ainda não processou o nó do round superior, puxa o vencedor persistente
+        if (pai1.isWinner && !pai1.isEliminated) slotFilho.team = pai1.team;
+        else if (pai2.isWinner && !pai2.isEliminated) slotFilho.team = pai2.team;
       }
     }
   }
@@ -253,7 +260,7 @@ function drawSeparatedBezierConnection(r1, angleA, col1, w1, r2, angleB, col2, w
 }
 
 // ============================================================
-// DESENHO DOS CIRULOS (NÓS) E VELOCIDADE DE CARREGAMENTO
+// DESENHO DOS CIRULOS (NÓS) E PREENCHIMENTO DE BANDEIRAS
 // ============================================================
 function drawNode(slot) {
   const { team, radius, angle, round, matchId, isWinner, isEliminated } = slot;
@@ -275,7 +282,7 @@ function drawNode(slot) {
     const countryCodeUpper = team.code.toUpperCase();
     const countryCodeLower = team.code.toLowerCase();
     
-    const isoMap = { bra: 'br', fra: 'fr', ger: 'de', esp: 'es', arg: 'ar', can: 'ca', mex: 'mx', usa: 'us', eng: 'gb-eng', nor: 'no', por: 'pt', ita: 'it', jpn: 'jp', mar: 'ma', sui: 'ch', egy: 'eg', gha: 'gh', col: 'co', bel: 'be', sen: 'sn' };
+    const isoMap = { bra: 'br', fra: 'fr', ger: 'de', esp: 'es', arg: 'ar', can: 'ca', mex: 'mx', usa: 'us', eng: 'gb-eng', nor: 'no', por: 'pt', ita: 'it', jpn: 'jp', mar: 'ma', sui: 'ch', egy: 'eg', gha: 'gh', col: 'co', bel: 'be', sen: 'sn', cro: 'hr', aut: 'at', bih: 'ba', pan: 'pa', rsa: 'za', par: 'py', tha: 'th', ecu: 'ec', civ: 'ci', cpv: 'cv', aus: 'au', irq: 'iq', alg: 'dz' };
     const flag2Letter = isoMap[countryCodeLower] || countryCodeLower.substring(0, 2);
     
     const apiFlagUrl = `https://flagcdn.com/${flag2Letter}.svg`;
