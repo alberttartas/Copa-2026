@@ -1205,194 +1205,52 @@
     }
 
     // ============================================
-    // RENDERIZAÇÃO PRINCIPAL
-    // ============================================
-    function render(data) {
-      clear(svg);
-      allNodeGroups = [];
-      drawBackground();
+// RENDERIZAÇÃO PRINCIPAL (CORRIGIDA)
+// ============================================
+function render(data) {
+  clear(svg);
+  allNodeGroups = [];
+  drawBackground();
 
-      const rounds = processRounds(data);
-      if (rounds.length === 0) {
-        statusEl.innerHTML = `⚠️ Nenhum jogo do mata-mata encontrado.`;
-        return;
-      }
+  const rounds = processRounds(data);
+  if (rounds.length === 0) {
+    statusEl.innerHTML = `⚠️ Nenhum jogo do mata-mata encontrado.`;
+    return;
+  }
 
-      let previousNodes = [];
-      
-      for (let ri = 0; ri < rounds.length; ri++) {
-        const round = rounds[ri];
-        const matches = round.matches || [];
-        const isFirstRound = ri === 0;
-        const isLastRound = ri === rounds.length - 1;
-        
-        const r = LEVEL_R[ri] || LEVEL_R[LEVEL_R.length - 1];
-        const sizeIdx = Math.min(ri, NODE_SIZE.length - 1);
-        const size = NODE_SIZE[sizeIdx];
-        
-        if (isFirstRound) {
-          const nodes = [];
-          
-          matches.forEach((match, idx) => {
-            const step = 360 / matches.length;
-            const angle = idx * step;
-            const branchIdx = Math.floor(idx / (matches.length / 8)) % 8;
-            
-            if (match.home && match.home.name && match.home.name !== 'TBD') {
-              const homeNode = {
-                team: {
-                  ...match.home,
-                  _matchData: {
-                    opponent: match.away,
-                    homeName: match.home.name,
-                    awayName: match.away?.name || '—',
-                    score: match.score ? `${match.score.home ?? '?'} × ${match.score.away ?? '?'}` : '—',
-                    stage: round.label,
-                    date: new Date(match.date).toLocaleDateString('pt-BR'),
-                    time: new Date(match.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}),
-                    status: match.status || 'SCHEDULED',
-                    isUpcoming: ['SCHEDULED', 'TIMED'].includes(match.status),
-                    isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
-                    isFinished: match.status === 'FINISHED',
-                    statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE'
-                  }
-                },
-                angle: normalizeAngle(angle - step/4),
-                branchIdx: branchIdx,
-                matchId: match.id,
-                isHome: true
-              };
-              nodes.push(homeNode);
-            }
-            
-            if (match.away && match.away.name && match.away.name !== 'TBD') {
-              const awayNode = {
-                team: {
-                  ...match.away,
-                  _matchData: {
-                    opponent: match.home,
-                    homeName: match.home?.name || '—',
-                    awayName: match.away.name,
-                    score: match.score ? `${match.score.home ?? '?'} × ${match.score.away ?? '?'}` : '—',
-                    stage: round.label,
-                    date: new Date(match.date).toLocaleDateString('pt-BR'),
-                    time: new Date(match.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}),
-                    status: match.status || 'SCHEDULED',
-                    isUpcoming: ['SCHEDULED', 'TIMED'].includes(match.status),
-                    isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
-                    isFinished: match.status === 'FINISHED',
-                    statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE'
-                  }
-                },
-                angle: normalizeAngle(angle + step/4),
-                branchIdx: branchIdx,
-                matchId: match.id,
-                isHome: false
-              };
-              nodes.push(awayNode);
-            }
-          });
-          
-          nodes.forEach(node => {
-            const pending = !node.team.id || node.team.name === 'TBD';
-            teamNode(
-              node.team,
-              r,
-              node.angle,
-              pending ? GREY : BRANCH_COLORS[node.branchIdx],
-              pending,
-              size,
-              0,
-              false
-            );
-          });
-          
-          previousNodes = nodes;
-        } else {
-          const currentNodes = [];
-          
-          matches.forEach((match) => {
-            const homeParent = previousNodes.find(n => 
-              n.team.id === match.home?.id || 
-              n.team.code === match.home?.code ||
-              n.team.name === match.home?.name
-            );
-            
-            const awayParent = previousNodes.find(n => 
-              n.team.id === match.away?.id || 
-              n.team.code === match.away?.code ||
-              n.team.name === match.away?.name
-            );
-            
-            if (!homeParent || !awayParent) {
-              console.warn(`⚠️ Pais não encontrados para match ${match.id}`, match);
-              return;
-            }
-            
-            const childAngle = calculateMidAngle(homeParent.angle, awayParent.angle);
-            
-            let winnerTeam = null;
-            let decided = false;
-            
-            if (match.winnerId) {
-              decided = true;
-              winnerTeam = match.home?.id === match.winnerId ? match.home : match.away;
-            } else if (match.status === 'FINISHED' && match.score) {
-              const homeScore = match.score?.home || 0;
-              const awayScore = match.score?.away || 0;
-              if (homeScore > awayScore) {
-                decided = true;
-                winnerTeam = match.home;
-              } else if (awayScore > homeScore) {
-                decided = true;
-                winnerTeam = match.away;
-              } else if (match.score?.penalties) {
-                // Desempate nos pênaltis
-                const penHome = match.score.penalties?.home || 0;
-                const penAway = match.score.penalties?.away || 0;
-                if (penHome > penAway) {
-                  decided = true;
-                  winnerTeam = match.home;
-                } else if (penAway > penHome) {
-                  decided = true;
-                  winnerTeam = match.away;
-                }
-              }
-            }
-            
-            const branchIdx = decided ? 
-              (winnerTeam?.id === match.home?.id ? homeParent.branchIdx : awayParent.branchIdx) : 
-              homeParent.branchIdx;
-            
-            const color = decided ? BRANCH_COLORS[branchIdx] : GREY;
-            
-            const rMid = (LEVEL_R[ri-1] + LEVEL_R[ri]) / 2;
-            const glowLevel = Math.min(ri, GLOW_AMOUNT.length - 1);
-            const lineWidth = Math.min(ri + 1, LINE_WIDTH.length - 1);
-            
-            drawConnector(
-              LEVEL_R[ri-1],
-              homeParent.angle,
-              awayParent.angle,
-              rMid,
-              childAngle,
-              LEVEL_R[ri],
-              color,
-              glowLevel,
-              lineWidth
-            );
-            
-            const teamObj = winnerTeam || {
-              name: 'TBD',
-              logo: null,
-              id: null,
-              code: null,
+  let previousNodes = [];
+
+  for (let ri = 0; ri < rounds.length; ri++) {
+    const round = rounds[ri];
+    const matches = round.matches || [];
+    const isFirstRound = (ri === 0);
+    const r = LEVEL_R[ri] || LEVEL_R[LEVEL_R.length - 1];
+    const sizeIdx = Math.min(ri, NODE_SIZE.length - 1);
+    const size = NODE_SIZE[sizeIdx];
+
+    if (isFirstRound) {
+      // --------------------------------------------------
+      // PRIMEIRA FASE: criar um nó para cada time (home e away)
+      // --------------------------------------------------
+      const nodes = [];
+      const totalMatches = matches.length;
+      matches.forEach((match, idx) => {
+        const step = 360 / totalMatches;
+        const angle = idx * step;
+        const branchIdx = Math.floor(idx / (totalMatches / 8)) % 8;
+
+        // Time da casa
+        if (match.home && match.home.name && match.home.name !== 'TBD') {
+          const homeAngle = normalizeAngle(angle - step * 0.2);
+          const homeNode = {
+            team: {
+              ...match.home,
               _matchData: {
-                opponent: null,
-                homeName: match.home?.name || '—',
+                opponent: match.away,
+                homeName: match.home.name,
                 awayName: match.away?.name || '—',
                 score: match.score ? `${match.score.home ?? '?'} × ${match.score.away ?? '?'}` : '—',
-                stage: round.label || `Fase ${ri + 1}`,
+                stage: round.label,
                 date: new Date(match.date).toLocaleDateString('pt-BR'),
                 time: new Date(match.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}),
                 status: match.status || 'SCHEDULED',
@@ -1401,50 +1259,192 @@
                 isFinished: match.status === 'FINISHED',
                 statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE'
               }
-            };
-            
-            if (winnerTeam) {
-              teamObj._matchData.opponent = match.home?.id === winnerTeam.id ? match.away : match.home;
-            }
-            
-            currentNodes.push({
-              team: teamObj,
-              angle: childAngle,
-              decided: decided,
-              branchIdx: branchIdx,
-              matchId: match.id
-            });
-          });
-          
-          const isChampionPhase = isLastRound && currentNodes.length === 1;
-          const glowIdx = Math.min(ri, GLOW_AMOUNT.length - 1);
-          
-          currentNodes.forEach((node, idx) => {
-            const isChampion = isChampionPhase && node.decided && idx === 0;
-            teamNode(
-              node.team,
-              LEVEL_R[ri],
-              node.angle,
-              node.decided ? BRANCH_COLORS[node.branchIdx] : GREY,
-              !node.decided,
-              size,
-              node.decided ? glowIdx : 0,
-              isChampion
-            );
-          });
-          
-          previousNodes = currentNodes;
+            },
+            angle: homeAngle,
+            branchIdx: branchIdx,
+            matchId: match.id,
+            isHome: true
+          };
+          nodes.push(homeNode);
+          teamNode(homeNode.team, r, homeAngle, BRANCH_COLORS[branchIdx], false, size, 0, false);
+        } else {
+          // Criar TBD para home se não existir
+          const homeAngle = normalizeAngle(angle - step * 0.2);
+          const tbdTeam = { name: 'TBD', logo: null, id: null, code: null, _matchData: {} };
+          nodes.push({ team: tbdTeam, angle: homeAngle, branchIdx: 0 });
+          teamNode(tbdTeam, r, homeAngle, GREY, true, size, 0, false);
         }
-      }
 
-      drawTrophy();
-      updateLivePanel(data);
+        // Time visitante
+        if (match.away && match.away.name && match.away.name !== 'TBD') {
+          const awayAngle = normalizeAngle(angle + step * 0.2);
+          const awayNode = {
+            team: {
+              ...match.away,
+              _matchData: {
+                opponent: match.home,
+                homeName: match.home?.name || '—',
+                awayName: match.away.name,
+                score: match.score ? `${match.score.home ?? '?'} × ${match.score.away ?? '?'}` : '—',
+                stage: round.label,
+                date: new Date(match.date).toLocaleDateString('pt-BR'),
+                time: new Date(match.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}),
+                status: match.status || 'SCHEDULED',
+                isUpcoming: ['SCHEDULED', 'TIMED'].includes(match.status),
+                isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
+                isFinished: match.status === 'FINISHED',
+                statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE'
+              }
+            },
+            angle: awayAngle,
+            branchIdx: branchIdx,
+            matchId: match.id,
+            isHome: false
+          };
+          nodes.push(awayNode);
+          teamNode(awayNode.team, r, awayAngle, BRANCH_COLORS[branchIdx], false, size, 0, false);
+        } else {
+          const awayAngle = normalizeAngle(angle + step * 0.2);
+          const tbdTeam = { name: 'TBD', logo: null, id: null, code: null, _matchData: {} };
+          nodes.push({ team: tbdTeam, angle: awayAngle, branchIdx: 0 });
+          teamNode(tbdTeam, r, awayAngle, GREY, true, size, 0, false);
+        }
+      });
 
-      const ts = new Date(data.updatedAt).toLocaleString("pt-BR");
-      statusEl.innerHTML = `Atualizado em ${ts} <button id="refreshBtn">Atualizar agora</button>`;
-      document.getElementById("refreshBtn")?.addEventListener("click", load);
+      previousNodes = nodes;
+
+    } else {
+      // --------------------------------------------------
+      // FASES SEGUINTES: conectar 2 pais → 1 filho (por posição)
+      // --------------------------------------------------
+      const currentNodes = [];
+      const prevCount = previousNodes.length;
+
+      matches.forEach((match, idx) => {
+        // Cada match da fase atual corresponde a dois nós consecutivos da fase anterior
+        const idx1 = idx * 2;
+        const idx2 = idx * 2 + 1;
+
+        // Obter os pais (ou criar TBDs se não existirem)
+        let parent1, parent2;
+        if (idx1 < prevCount) {
+          parent1 = previousNodes[idx1];
+        } else {
+          const angle = (prevCount > 0) ? previousNodes[prevCount - 1].angle : 0;
+          const tbdTeam = { name: 'TBD', logo: null, id: null, code: null, _matchData: {} };
+          parent1 = { team: tbdTeam, angle: normalizeAngle(angle + 10), branchIdx: 0 };
+        }
+
+        if (idx2 < prevCount) {
+          parent2 = previousNodes[idx2];
+        } else {
+          const angle = (prevCount > 0) ? previousNodes[prevCount - 1].angle : 0;
+          const tbdTeam = { name: 'TBD', logo: null, id: null, code: null, _matchData: {} };
+          parent2 = { team: tbdTeam, angle: normalizeAngle(angle - 10), branchIdx: 0 };
+        }
+
+        // Ângulo do filho = ponto médio dos pais
+        const childAngle = calculateMidAngle(parent1.angle, parent2.angle);
+
+        // Determinar vencedor (se houver)
+        let winnerTeam = null;
+        let decided = false;
+        if (match.winnerId) {
+          decided = true;
+          winnerTeam = (match.home?.id === match.winnerId) ? match.home : match.away;
+        } else if (match.status === 'FINISHED' && match.score) {
+          const homeScore = match.score?.home || 0;
+          const awayScore = match.score?.away || 0;
+          if (homeScore > awayScore) { decided = true; winnerTeam = match.home; }
+          else if (awayScore > homeScore) { decided = true; winnerTeam = match.away; }
+          else if (match.score?.penalties) {
+            const penHome = match.score.penalties?.home || 0;
+            const penAway = match.score.penalties?.away || 0;
+            if (penHome > penAway) { decided = true; winnerTeam = match.home; }
+            else if (penAway > penHome) { decided = true; winnerTeam = match.away; }
+          }
+        }
+
+        // Cor do ramo
+        const branchIdx = decided ?
+          (winnerTeam?.id === match.home?.id ? parent1.branchIdx : parent2.branchIdx) :
+          parent1.branchIdx;
+        const color = decided ? BRANCH_COLORS[branchIdx] : GREY;
+
+        // Desenhar conector
+        const rMid = (LEVEL_R[ri-1] + LEVEL_R[ri]) / 2;
+        const glowLevel = Math.min(ri, GLOW_AMOUNT.length - 1);
+        const lineWidth = Math.min(ri + 1, LINE_WIDTH.length - 1);
+
+        drawConnector(
+          LEVEL_R[ri-1],
+          parent1.angle,
+          parent2.angle,
+          rMid,
+          childAngle,
+          LEVEL_R[ri],
+          color,
+          glowLevel,
+          lineWidth
+        );
+
+        // Criar objeto do time filho
+        const teamObj = winnerTeam || {
+          name: 'TBD',
+          logo: null,
+          id: null,
+          code: null,
+          _matchData: {
+            opponent: null,
+            homeName: match.home?.name || '—',
+            awayName: match.away?.name || '—',
+            score: match.score ? `${match.score.home ?? '?'} × ${match.score.away ?? '?'}` : '—',
+            stage: round.label || `Fase ${ri + 1}`,
+            date: new Date(match.date).toLocaleDateString('pt-BR'),
+            time: new Date(match.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}),
+            status: match.status || 'SCHEDULED',
+            isUpcoming: ['SCHEDULED', 'TIMED'].includes(match.status),
+            isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
+            isFinished: match.status === 'FINISHED',
+            statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE'
+          }
+        };
+        if (winnerTeam) {
+          teamObj._matchData.opponent = (match.home?.id === winnerTeam.id) ? match.away : match.home;
+        }
+
+        // Desenhar nó do filho
+        const isChampion = (ri === rounds.length - 1) && decided && matches.length === 1;
+        teamNode(
+          teamObj,
+          LEVEL_R[ri],
+          childAngle,
+          decided ? BRANCH_COLORS[branchIdx] : GREY,
+          !decided,
+          size,
+          decided ? glowLevel : 0,
+          isChampion
+        );
+
+        currentNodes.push({
+          team: teamObj,
+          angle: childAngle,
+          branchIdx: branchIdx,
+          decided: decided
+        });
+      });
+
+      previousNodes = currentNodes;
     }
+  }
 
+  drawTrophy();
+  updateLivePanel(data);
+
+  const ts = new Date(data.updatedAt).toLocaleString("pt-BR");
+  statusEl.innerHTML = `Atualizado em ${ts} <button id="refreshBtn">Atualizar agora</button>`;
+  document.getElementById("refreshBtn")?.addEventListener("click", load);
+}
     // ============================================
     // LOAD E ATUALIZAÇÃO
     // ============================================
