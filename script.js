@@ -1,5 +1,5 @@
 // ============================================================
-// BRACKET CIRCULAR – GEOMETRIA, POSIÇÕES FIÉIS E ESTILO SÓBRIO
+// BRACKET CIRCULAR – COPA DO MUNDO 2026 (POSICIONAMENTO RIGIDAMENTE CORRETO)
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -20,41 +20,42 @@ const state = {
   loading: false,
 };
 
-// ---------- GEOMETRIC CONSTANTS ----------
+// ---------- CONSTANTES GEOMÉTRICAS ----------
 const CX = 600, CY = 500;
 const LEVEL_R = [420, 360, 300, 240, 180, 120];
 
-// Cores fieis ao design original (Linha inativa/eliminada em cinza escuro)
-const COLOR_INACTIVE_LINE = '#313136';
-const COLOR_INACTIVE_NODE = '#1a1a1f';
+const COLOR_INACTIVE_LINE = '#2a2a2e';
+const COLOR_INACTIVE_NODE = '#141416';
 
 // ============================================================
-// MAPEAMENTO FIXO ESTREITO DA IMAGEM DE REFERÊNCIA (32 SLOTS)
-// Sequência exata anti-horária começando pelo topo/esquerda
+// MAPA REAL DE ADVERSÁRIOS E POSIÇÕES SEGUINDO A IMAGEM 1782936066953.jpeg
+// Reorganizado par por par para que as conexões fiquem idênticas ao design
 // ============================================================
 const FIXED_POSITION_MAP = [
   // --- HEMISFÉRIO ESQUERDO (Índices 0 a 15) ---
-  { code: 'BRA', side: 'left' }, { code: 'JPN', side: 'left' },
-  { code: 'GER', side: 'left' }, { code: 'PAR', side: 'left' },
-  { code: 'FRA', side: 'left' }, { code: 'RSA', side: 'left' },
-  { code: 'CAN', side: 'left' }, { code: 'MAR', side: 'left' },
-  { code: 'POR', side: 'left' }, { code: 'CRO', side: 'left' },
-  { code: 'ESP', side: 'left' }, { code: 'AUT', side: 'left' },
-  { code: 'USA', side: 'left' }, { code: 'BIH', side: 'left' },
-  { code: 'BEL', side: 'left' }, { code: 'SEN', side: 'left' },
+  // Topo Esquerdo descendo até a Base Esquerda
+  { code: 'FRA', side: 'left' },  { code: 'RSA', side: 'left' },
+  { code: 'GER', side: 'left' },  { code: 'PAR', side: 'left' },
+  { code: 'CAN', side: 'left' },  { code: 'MAR', side: 'left' },
+  { code: 'POR', side: 'left' },  { code: 'CRO', side: 'left' },
+  { code: 'ESP', side: 'left' },  { code: 'AUT', side: 'left' },
+  { code: 'USA', side: 'left' },  { code: 'BIH', side: 'left' },
+  { code: 'BEL', side: 'left' },  { code: 'SEN', side: 'left' },
+  { code: 'GHA', side: 'left' },  { code: 'EGY', side: 'left' },
 
   // --- HEMISFÉRIO DIREITO (Índices 16 a 31) ---
-  { code: 'GHA', side: 'right' }, { code: 'COL', side: 'right' },
-  { code: 'ALG', side: 'right' }, { code: 'SUI', side: 'right' },
-  { code: 'EGY', side: 'right' }, { code: 'IRQ', side: 'right' },
-  { code: 'AUS', side: 'right' }, { code: 'CPV', side: 'right' },
+  // Topo Direito descendo até a Base Direita
+  { code: 'BRA', side: 'right' }, { code: 'JPN', side: 'right' },
+  { code: 'NOR', side: 'right' }, { code: 'THA', side: 'right' },
+  { code: 'MEX', side: 'right' }, { code: 'ECU', side: 'right' },
+  { code: 'ENG', side: 'right' }, { code: 'CIV', side: 'right' },
   { code: 'ARG', side: 'right' }, { code: 'ITA', side: 'right' },
-  { code: 'ENG', side: 'right' }, { code: 'ECU', side: 'right' },
-  { code: 'MEX', side: 'right' }, { code: 'NOR', side: 'right' },
-  { code: 'THA', side: 'right' }, { code: 'CIV', side: 'right' }
+  { code: 'CPV', side: 'right' }, { code: 'AUS', side: 'right' },
+  { code: 'IRQ', side: 'right' }, { code: 'COL', side: 'right' },
+  { code: 'ALG', side: 'right' }, { code: 'SUI', side: 'right' }
 ];
 
-// Mapeamento de Cores Temáticas Oficiais por Seleção para as Linhas Ativas
+// Cores de realce para as seleções que estiverem ativas e avançando
 const TEAM_COLORS = {
   BRA: '#e5c158', FRA: '#2b52a1', CAN: '#c8232b', MAR: '#177d43',
   NOR: '#ba2031', MEX: '#155c37', ENG: '#ffffff', ARG: '#74acdf',
@@ -62,7 +63,7 @@ const TEAM_COLORS = {
 };
 
 // ============================================================
-// CONSTRUÇÃO DA ÁRVORE GEOMÉTRICA REORGANIZADA
+// GERADOR GEOMÉTRICO DO BRACKET
 // ============================================================
 
 function buildFixedLayout() {
@@ -72,20 +73,19 @@ function buildFixedLayout() {
 
   const half = totalLeaves / 2;
 
-  // Geração do Round 0 com ângulos corrigidos para casar com a imagem
   for (let i = 0; i < totalLeaves; i++) {
     let angle;
     const meta = FIXED_POSITION_MAP[i];
 
     if (meta.side === 'left') {
-      // Distribui os 16 nós da esquerda do topo até a base inferior esquerda
+      // Ângulos precisos do hemisfério esquerdo (sentido anti-horário)
       const percent = i / (half - 1);
-      angle = Math.PI + (Math.PI / 1.15) * (percent - 0.5);
+      angle = Math.PI + (Math.PI / 1.1) * (percent - 0.5);
     } else {
-      // Distribui os 16 nós da direita da base inferior direita até o topo direito
+      // Ângulos precisos do hemisfério direito (sentido horário)
       const idx = i - half;
       const percent = idx / (half - 1);
-      angle = (Math.PI / 1.15) * (0.5 - percent);
+      angle = (Math.PI / 1.1) * (0.5 - percent);
     }
 
     layout[0].push({
@@ -103,7 +103,7 @@ function buildFixedLayout() {
     });
   }
 
-  // Geração das camadas internas baseadas na árvore pura
+  // Geração Bottom-Up estrutural limpa
   for (let r = 1; r < totalRounds; r++) {
     const prevLayer = layout[r - 1];
     const count = prevLayer.length / 2;
@@ -134,18 +134,17 @@ function buildFixedLayout() {
 }
 
 // ============================================================
-// CORRELAÇÃO DE DADOS DA API COM AS POSIÇÕES DA IMAGEM
+// VINCULAÇÃO E FILTRAGEM DINÂMICA DA API
 // ============================================================
 
 function mapApiToSlots() {
   const layout = buildFixedLayout();
   const round0Matches = state.rounds[0]?.matches || [];
 
-  // 1. Vincula as partidas correspondentes aos slots fixos do Round 0
+  // 1. Resolve Round 0 casando o time pré-definido com as partidas ativas
   for (let i = 0; i < layout[0].length; i++) {
     const slot = layout[0][i];
     
-    // Procura na API a partida onde este país do mapa estrito está jogando
     const match = round0Matches.find(m => 
       m.home?.code?.toUpperCase() === slot.team.code || 
       m.away?.code?.toUpperCase() === slot.team.code
@@ -154,19 +153,17 @@ function mapApiToSlots() {
     if (match) {
       const isHome = match.home?.code?.toUpperCase() === slot.team.code;
       const actualTeam = isHome ? match.home : match.away;
-      const opponent = isHome ? match.away : match.home;
 
       slot.team = actualTeam;
       slot.matchId = match.fixtureId;
 
-      // Define se foi eliminado logo no Round 1
       if (match.winnerId && match.winnerId !== actualTeam.id) {
         slot.isEliminated = true;
       }
     }
   }
 
-  // 2. Resolve as subidas dos nós internos verificando os vencedores reais
+  // 2. Calcula as subidas e aplica efeito cinza nos nós perdedores/eliminados
   for (let r = 1; r < layout.length; r++) {
     const currentLayer = layout[r];
     const prevLayer = layout[r - 1];
@@ -177,7 +174,6 @@ function mapApiToSlots() {
       const pai1 = prevLayer[i * 2];
       const pai2 = prevLayer[i * 2 + 1];
 
-      // Localiza o confronto correspondente na API
       const match = currentRoundMatches.find(m => 
         (pai1.team?.id && (m.home?.id === pai1.team.id || m.away?.id === pai1.team.id)) ||
         (pai2.team?.id && (m.home?.id === pai2.team.id || m.away?.id === pai2.team.id))
@@ -194,12 +190,10 @@ function mapApiToSlots() {
         if (winner) {
           slotFilho.team = winner;
           
-          // Marca quem avançou na árvore para fins estéticos de destaque
           if (pai1.team && pai1.team.id === winner.id) { pai1.isWinner = true; pai2.isEliminated = true; }
           if (pai2.team && pai2.team.id === winner.id) { pai2.isWinner = true; pai1.isEliminated = true; }
         }
         
-        // Se a partida superior já acabou e esse slot não subiu, ele foi eliminado
         if (match.status === 'FINISHED' && (!winner || slotFilho.team?.id !== winner.id)) {
           slotFilho.isEliminated = true;
         }
@@ -211,7 +205,7 @@ function mapApiToSlots() {
 }
 
 // ============================================================
-// SVG CONNECTIONS AND RENDER (ESTILO SÓBRIO)
+// RENDERING DO SVG (LINHAS DISCRETAS / REALCES)
 // ============================================================
 
 function render() {
@@ -247,14 +241,12 @@ function drawFixedConnections(layout) {
 
       if (!parent1 || !parent2 || !child) continue;
 
-      // Aplica lógica de cor: se o pai está eliminado, o fio vira cinza fosco desbotado
       const color1 = (parent1.isWinner && !parent1.isEliminated) ? (TEAM_COLORS[parent1.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
       const width1 = (parent1.isWinner && !parent1.isEliminated) ? 2.2 : 1.2;
 
       const color2 = (parent2.isWinner && !parent2.isEliminated) ? (TEAM_COLORS[parent2.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
       const width2 = (parent2.isWinner && !parent2.isEliminated) ? 2.2 : 1.2;
 
-      // Tronco unificado de avanço
       const jointColor = (child.team && !child.isEliminated) ? (TEAM_COLORS[child.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
       const jointWidth = (child.team && !child.isEliminated) ? 2.2 : 1.2;
 
@@ -282,7 +274,7 @@ function drawSeparatedBezierConnection(r1, angleA, col1, w1, r2, angleB, col2, w
 }
 
 // ============================================================
-// DESIGN DOS NÓS COM PRESERVAÇÃO E FILTRO DE ELIMINADOS
+// DESENHO DOS NÓS + TRATAMENTO DOS ELIMINADOS EM PRETO E BRANCO
 // ============================================================
 
 function drawNode(slot) {
@@ -294,9 +286,8 @@ function drawNode(slot) {
 
   const nodeRadius = isWinner && !isEliminated ? 17 : 14;
 
-  // Filtro de opacidade e saturação para times eliminados (igualmente cinzas na imagem de referência)
   const nodeFill = isEliminated ? COLOR_INACTIVE_NODE : '#070709';
-  const nodeStroke = isEliminated ? '#242428' : (isWinner ? '#d9a531' : '#44444a');
+  const nodeStroke = isEliminated ? '#222226' : (isWinner ? '#d9a531' : '#3d3d44');
   const nodeStrokeWidth = isWinner && !isEliminated ? 2.5 : 1;
 
   g.appendChild(elNS('circle', { cx: x, cy: y, r: nodeRadius, fill: nodeFill, stroke: nodeStroke, 'stroke-width': nodeStrokeWidth }));
@@ -311,7 +302,6 @@ function drawNode(slot) {
     const apiFlagUrl = `https://flagcdn.com/${flag2Letter}.svg`;
     const localShieldUrl = `assets/img/federations/${countryCodeUpper}.svg`;
 
-    // Recorte circular perfeito
     const clipId = `clip-r${round}-n${slot.index}-${countryCodeLower}`;
     const clipPath = elNS('clipPath', { id: clipId });
     clipPath.appendChild(elNS('circle', { cx: x, cy: y, r: nodeRadius - 0.5 }));
@@ -323,12 +313,11 @@ function drawNode(slot) {
       href: apiFlagUrl,
       preserveAspectRatio: 'xMidYMid slice',
       'clip-path': `url(#${clipId})`,
-      // Deixa a bandeira em preto e branco se tiver sido eliminada
-      style: isEliminated ? 'filter: grayscale(1) opacity(0.25);' : ''
+      style: isEliminated ? 'filter: grayscale(1) opacity(0.2);' : ''
     });
     g.appendChild(imgFlag);
 
-    // ESCUDOS EXTERNOS (Apenas no Round Inicial de Entrada)
+    // ESCUDOS EXTERNOS DA FEDERAÇÃO (Apenas Round 0)
     if (round === 0) {
       const shieldDistance = radius + 28; 
       const [sx, sy] = polar(shieldDistance, angle);
@@ -340,7 +329,7 @@ function drawNode(slot) {
         width: shieldSize,
         height: shieldSize,
         href: localShieldUrl, 
-        style: isEliminated ? 'filter: grayscale(1) opacity(0.2);' : ''
+        style: isEliminated ? 'filter: grayscale(1) opacity(0.15);' : ''
       });
 
       imgFederation.onerror = () => imgFederation.remove();
@@ -349,7 +338,7 @@ function drawNode(slot) {
       const [lx, ly] = polar(radius + 14, angle);
       svgLayer.appendChild(elNS('line', {
         x1: lx, y1: ly, x2: sx, y2: sy,
-        stroke: isEliminated ? '#222226' : '#3a3a42', 'stroke-width': 1, 'stroke-dasharray': '2,2'
+        stroke: isEliminated ? '#222226' : '#33333a', 'stroke-width': 1, 'stroke-dasharray': '2,2'
       }));
     }
   } else {
@@ -358,7 +347,6 @@ function drawNode(slot) {
     g.appendChild(t);
   }
 
-  // Interação de tooltips
   g.onmouseenter = (e) => {
     const rect = svgLayer.getBoundingClientRect();
     state.hover = { x: e.clientX - rect.left, y: e.clientY - rect.top, matchId };
@@ -370,7 +358,7 @@ function drawNode(slot) {
 }
 
 // ============================================================
-// BASE E AUXILIARES STANDARD
+// FUNÇÕES AUXILIARES DE SUPORTE
 // ============================================================
 
 function polar(r, a) {
@@ -390,21 +378,21 @@ function clearSVG() {
 function drawBackground() {
   const defs = elNS('defs', { id: 'defs' });
   const grad = elNS('radialGradient', { id: 'bgGlow', cx: '50%', cy: '50%', r: '55%' });
-  grad.appendChild(elNS('stop', { offset: '0%', 'stop-color': '#16130d' }));
-  grad.appendChild(elNS('stop', { offset: '70%', 'stop-color': '#08080a' }));
-  grad.appendChild(elNS('stop', { offset: '100%', 'stop-color': '#030304' }));
+  grad.appendChild(elNS('stop', { offset: '0%', 'stop-color': '#14120e' }));
+  grad.appendChild(elNS('stop', { offset: '70%', 'stop-color': '#060608' }));
+  grad.appendChild(elNS('stop', { offset: '100%', 'stop-color': '#020203' }));
   defs.appendChild(grad);
   svgLayer.appendChild(defs);
   svgLayer.appendChild(elNS('rect', { x: 0, y: 0, width: 1200, height: 1000, fill: 'url(#bgGlow)' }));
 
   LEVEL_R.forEach((r) => {
-    svgLayer.appendChild(elNS('circle', { cx: CX, cy: CY, r, fill: 'none', stroke: '#101013', 'stroke-width': 1 }));
+    svgLayer.appendChild(elNS('circle', { cx: CX, cy: CY, r, fill: 'none', stroke: '#0e0e11', 'stroke-width': 1 }));
   });
 }
 
 function drawTrophy() {
   const g = elNS('g');
-  g.appendChild(elNS('circle', { cx: CX, cy: CY, r: 52, fill: '#030304', stroke: '#1f1a0e', 'stroke-width': 1.5 }));
+  g.appendChild(elNS('circle', { cx: CX, cy: CY, r: 52, fill: '#020203', stroke: '#1c170d', 'stroke-width': 1.5 }));
   const t = elNS('text', { x: CX, y: CY + 12, 'text-anchor': 'middle', 'font-size': 42, fill: '#d9a531' });
   t.textContent = '🏆';
   g.appendChild(t);
