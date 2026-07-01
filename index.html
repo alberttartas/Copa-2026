@@ -446,650 +446,309 @@
     <button id="refreshBtn">Atualizar agora</button>
   </div>
 
- <!doctype html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Copa do Mundo 2026 — Chave Oficial</title>
-<style>
-  /* ... SEU CSS EXISTENTE ... */
-</style>
-</head>
-<body>
-  <!-- ... SEU HTML EXISTENTE ... -->
+   <script type="module">
+    // ============================================================
+//  BRACKET CIRCULAR – RENDERIZAÇÃO POR FASE (SEM LOOKUP)
+//  ✅ backend já entrega rounds prontos
+//  ✅ front apenas desenha, sem reconstruir árvore
+//  ✅ layout radial (círculo) com conectores suaves
+//  ✅ tooltip, destaque de vencedor, AO VIVO
+// ============================================================
 
-  <script type="module">
-    // ============================================
-    // CONSTANTES E CONFIGURAÇÕES
-    // ============================================
-    const NS = "http://www.w3.org/2000/svg";
-    const CX = 500, CY = 500;
-    const POLL_MS = 90_000;
+// ---------- CONSTANTES ----------
+const NS = 'http://www.w3.org/2000/svg';
+const CX = 500, CY = 500;
+const LEVEL_R = [460, 400, 338, 276, 214, 130];
+const NODE_SIZE = [28, 34, 42, 52, 66, 80];
+const BRANCH_COLORS = [
+  '#e6484f', '#3ddc84', '#f0c23d', '#4ea1f7',
+  '#b768e0', '#ff9f53', '#2ec4b6', '#ff6f91'
+];
+const GREY = '#3c3c40';
+const GLOW_AMOUNT = [4, 8, 14, 20, 26];
+const STATUS_LABELS = {
+  LIVE: 'AO VIVO',
+  FINISHED: 'ENCERRADO',
+  SCHEDULED: 'EM BREVE',
+  TIMED: 'EM BREVE',
+  IN_PLAY: 'AO VIVO',
+  PAUSED: 'INTERVALO',
+};
 
-    const NODE_SIZE = [28, 34, 42, 52, 66, 80];
-    const LINE_WIDTH = [1.2, 2, 3, 4, 5];
-    const GLOW_AMOUNT = [4, 8, 14, 20, 26];
-    const LEVEL_R = [460, 400, 338, 276, 214, 130];
-    const BRANCH_COLORS = [
-      "#e6484f", "#3ddc84", "#f0c23d", "#4ea1f7",
-      "#b768e0", "#ff9f53", "#2ec4b6", "#ff6f91",
-    ];
-    const GREY = "#3c3c40";
+// ---------- DOM REFS ----------
+const svg = document.getElementById('stage');
+const statusEl = document.getElementById('status');
+const tooltip = document.getElementById('tooltip');
+const livePanel = document.getElementById('livePanel');
+let currentData = null;
 
-    const STATUS_LABELS = {
-      'LIVE': 'AO VIVO',
-      'FINISHED': 'ENCERRADO',
-      'SCHEDULED': 'EM BREVE',
-      'TIMED': 'EM BREVE',
-      'IN_PLAY': 'AO VIVO',
-      'PAUSED': 'INTERVALO',
-      'SUSPENDED': 'SUSPENSO',
-      'POSTPONED': 'ADIADO',
-      'CANCELLED': 'CANCELADO'
-    };
+// ---------- FUNÇÕES AUXILIARES ----------
+function el(tag, attrs) {
+  const n = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) n.setAttribute(k, v);
+  return n;
+}
 
-    const CONFEDERATIONS = {
-      BRA:"conmebol", ARG:"conmebol", URU:"conmebol", COL:"conmebol",
-      USA:"concacaf", MEX:"concacaf", CAN:"concacaf",
-      GER:"uefa", FRA:"uefa", ESP:"uefa", ENG:"uefa", POR:"uefa", NED:"uefa",
-      JPN:"afc", KOR:"afc", IRN:"afc", KSA:"afc", AUS:"afc",
-      MAR:"caf", SEN:"caf", NGA:"caf", EGY:"caf", ALG:"caf", TUN:"caf",
-      NZL:"ofc"
-    };
+function polar(r, angleDeg) {
+  const a = ((angleDeg - 90) * Math.PI) / 180;
+  return [CX + r * Math.cos(a), CY + r * Math.sin(a)];
+}
 
-    // ============================================
-    // ELEMENTOS DOM
-    // ============================================
-    const svg = document.getElementById("stage");
-    const statusEl = document.getElementById("status");
-    const tooltip = document.getElementById("tooltip");
-    const livePanel = document.getElementById("livePanel");
-    let allNodeGroups = [];
-    let currentData = null;
+function normalizeAngle(a) {
+  a = a % 360;
+  if (a < 0) a += 360;
+  return a;
+}
 
-    // ============================================
-    // DADOS MOCK PARA TESTE (REMOVER DEPOIS)
-    // ============================================
-    function getMockData() {
-      return {
-        rounds: [
-          {
-            key: "r32",
-            label: "Fase de 32",
-            matches: [
-              {
-                id: 1,
-                home: { id: 1, name: "Brasil", code: "BRA", logo: "https://flagcdn.com/w40/br.png" },
-                away: { id: 2, name: "Japão", code: "JPN", logo: "https://flagcdn.com/w40/jp.png" },
-                status: "FINISHED",
-                score: { home: 2, away: 0 },
-                winnerId: 1,
-                date: "2026-06-29T15:00:00Z"
-              },
-              {
-                id: 2,
-                home: { id: 3, name: "Argentina", code: "ARG", logo: "https://flagcdn.com/w40/ar.png" },
-                away: { id: 4, name: "Coreia do Sul", code: "KOR", logo: "https://flagcdn.com/w40/kr.png" },
-                status: "FINISHED",
-                score: { home: 3, away: 1 },
-                winnerId: 3,
-                date: "2026-06-29T15:00:00Z"
-              },
-              {
-                id: 3,
-                home: { id: 5, name: "Alemanha", code: "GER", logo: "https://flagcdn.com/w40/de.png" },
-                away: { id: 6, name: "Senegal", code: "SEN", logo: "https://flagcdn.com/w40/sn.png" },
-                status: "FINISHED",
-                score: { home: 4, away: 2 },
-                winnerId: 5,
-                date: "2026-06-29T15:00:00Z"
-              },
-              {
-                id: 4,
-                home: { id: 7, name: "França", code: "FRA", logo: "https://flagcdn.com/w40/fr.png" },
-                away: { id: 8, name: "Canadá", code: "CAN", logo: "https://flagcdn.com/w40/ca.png" },
-                status: "FINISHED",
-                score: { home: 2, away: 1 },
-                winnerId: 7,
-                date: "2026-06-29T15:00:00Z"
-              },
-              {
-                id: 5,
-                home: { id: 9, name: "Estados Unidos", code: "USA", logo: "https://flagcdn.com/w40/us.png" },
-                away: { id: 10, name: "México", code: "MEX", logo: "https://flagcdn.com/w40/mx.png" },
-                status: "FINISHED",
-                score: { home: 1, away: 1, penalties: { home: 4, away: 3 } },
-                winnerId: 9,
-                date: "2026-06-29T15:00:00Z"
-              },
-              {
-                id: 6,
-                home: { id: 11, name: "Inglaterra", code: "ENG", logo: "https://flagcdn.com/w40/gb-eng.png" },
-                away: { id: 12, name: "Irã", code: "IRN", logo: "https://flagcdn.com/w40/ir.png" },
-                status: "FINISHED",
-                score: { home: 3, away: 0 },
-                winnerId: 11,
-                date: "2026-06-29T15:00:00Z"
-              },
-              {
-                id: 7,
-                home: { id: 13, name: "Portugal", code: "POR", logo: "https://flagcdn.com/w40/pt.png" },
-                away: { id: 14, name: "Argélia", code: "ALG", logo: "https://flagcdn.com/w40/dz.png" },
-                status: "FINISHED",
-                score: { home: 2, away: 0 },
-                winnerId: 13,
-                date: "2026-06-29T15:00:00Z"
-              },
-              {
-                id: 8,
-                home: { id: 15, name: "Holanda", code: "NED", logo: "https://flagcdn.com/w40/nl.png" },
-                away: { id: 16, name: "Uruguai", code: "URU", logo: "https://flagcdn.com/w40/uy.png" },
-                status: "FINISHED",
-                score: { home: 2, away: 2, penalties: { home: 5, away: 4 } },
-                winnerId: 15,
-                date: "2026-06-29T15:00:00Z"
-              }
-            ]
-          },
-          {
-            key: "r16",
-            label: "Oitavas de Final",
-            matches: [
-              {
-                id: 17,
-                home: { id: 1, name: "Brasil", code: "BRA", logo: "https://flagcdn.com/w40/br.png" },
-                away: { id: 3, name: "Argentina", code: "ARG", logo: "https://flagcdn.com/w40/ar.png" },
-                status: "SCHEDULED",
-                score: null,
-                winnerId: null,
-                date: "2026-07-03T15:00:00Z"
-              },
-              {
-                id: 18,
-                home: { id: 5, name: "Alemanha", code: "GER", logo: "https://flagcdn.com/w40/de.png" },
-                away: { id: 7, name: "França", code: "FRA", logo: "https://flagcdn.com/w40/fr.png" },
-                status: "SCHEDULED",
-                score: null,
-                winnerId: null,
-                date: "2026-07-03T15:00:00Z"
-              },
-              {
-                id: 19,
-                home: { id: 9, name: "Estados Unidos", code: "USA", logo: "https://flagcdn.com/w40/us.png" },
-                away: { id: 11, name: "Inglaterra", code: "ENG", logo: "https://flagcdn.com/w40/gb-eng.png" },
-                status: "SCHEDULED",
-                score: null,
-                winnerId: null,
-                date: "2026-07-03T15:00:00Z"
-              },
-              {
-                id: 20,
-                home: { id: 13, name: "Portugal", code: "POR", logo: "https://flagcdn.com/w40/pt.png" },
-                away: { id: 15, name: "Holanda", code: "NED", logo: "https://flagcdn.com/w40/nl.png" },
-                status: "SCHEDULED",
-                score: null,
-                winnerId: null,
-                date: "2026-07-03T15:00:00Z"
-              }
-            ]
-          },
-          {
-            key: "qf",
-            label: "Quartas de Final",
-            matches: [
-              {
-                id: 21,
-                home: { id: 1, name: "Brasil", code: "BRA", logo: "https://flagcdn.com/w40/br.png" },
-                away: { id: 5, name: "Alemanha", code: "GER", logo: "https://flagcdn.com/w40/de.png" },
-                status: "SCHEDULED",
-                score: null,
-                winnerId: null,
-                date: "2026-07-07T15:00:00Z"
-              },
-              {
-                id: 22,
-                home: { id: 9, name: "Estados Unidos", code: "USA", logo: "https://flagcdn.com/w40/us.png" },
-                away: { id: 13, name: "Portugal", code: "POR", logo: "https://flagcdn.com/w40/pt.png" },
-                status: "SCHEDULED",
-                score: null,
-                winnerId: null,
-                date: "2026-07-07T15:00:00Z"
-              }
-            ]
-          },
-          {
-            key: "sf",
-            label: "Semifinal",
-            matches: [
-              {
-                id: 23,
-                home: { id: 1, name: "Brasil", code: "BRA", logo: "https://flagcdn.com/w40/br.png" },
-                away: { id: 9, name: "Estados Unidos", code: "USA", logo: "https://flagcdn.com/w40/us.png" },
-                status: "SCHEDULED",
-                score: null,
-                winnerId: null,
-                date: "2026-07-11T15:00:00Z"
-              }
-            ]
-          },
-          {
-            key: "final",
-            label: "Final",
-            matches: [
-              {
-                id: 24,
-                home: { id: 1, name: "Brasil", code: "BRA", logo: "https://flagcdn.com/w40/br.png" },
-                away: { id: 9, name: "Estados Unidos", code: "USA", logo: "https://flagcdn.com/w40/us.png" },
-                status: "SCHEDULED",
-                score: null,
-                winnerId: null,
-                date: "2026-07-15T15:00:00Z"
-              }
-            ]
-          }
-        ],
-        updatedAt: new Date().toISOString()
-      };
-    }
+function angleDiff(a, b) {
+  let d = normalizeAngle(b - a);
+  if (d > 180) d -= 360;
+  if (d < -180) d += 360;
+  return d;
+}
 
-    // ============================================
-    // FUNÇÕES AUXILIARES
-    // ============================================
-    function getConfederation(code) {
-      if (!code) return null;
-      return CONFEDERATIONS[code.toUpperCase()] || null;
-    }
+function midAngle(a, b) {
+  return normalizeAngle(a + angleDiff(a, b) / 2);
+}
 
-    function el(tag, attrs) {
-      const n = document.createElementNS(NS, tag);
-      for (const k in attrs) n.setAttribute(k, attrs[k]);
-      return n;
-    }
+function clear(node) {
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
 
-    function polar(r, angleDeg) {
-      const a = ((angleDeg - 90) * Math.PI) / 180;
-      return [CX + r * Math.cos(a), CY + r * Math.sin(a)];
-    }
+// ---------- DESENHO DE FUNDO ----------
+function drawBackground() {
+  const defs = el('defs');
+  const grad = el('radialGradient', { id: 'bgGlow', cx: '50%', cy: '50%', r: '50%' });
+  grad.appendChild(el('stop', { offset: '0%', 'stop-color': '#3a2c0c', 'stop-opacity': '0.6' }));
+  grad.appendChild(el('stop', { offset: '30%', 'stop-color': '#1c1508', 'stop-opacity': '0.4' }));
+  grad.appendChild(el('stop', { offset: '100%', 'stop-color': '#0b0b0c', 'stop-opacity': '1' }));
+  defs.appendChild(grad);
 
-    function normalizeAngle(a) {
-      a = a % 360;
-      if (a < 0) a += 360;
-      return a;
-    }
+  for (let i = 0; i < GLOW_AMOUNT.length; i++) {
+    const filter = el('filter', { id: `glow-${i}`, x: '-60%', y: '-60%', width: '220%', height: '220%' });
+    filter.appendChild(el('feGaussianBlur', { stdDeviation: GLOW_AMOUNT[i], result: 'blur' }));
+    const merge = el('feMerge');
+    merge.appendChild(el('feMergeNode', { in: 'blur' }));
+    merge.appendChild(el('feMergeNode', { in: 'SourceGraphic' }));
+    filter.appendChild(merge);
+    defs.appendChild(filter);
+  }
 
-    function shortestAngleDiff(a, b) {
-      let diff = normalizeAngle(b - a);
-      if (diff > 180) diff -= 360;
-      return diff;
-    }
+  svg.appendChild(defs);
+  svg.appendChild(el('rect', { x: 0, y: 0, width: 1000, height: 1000, fill: 'url(#bgGlow)' }));
 
-    function calculateMidAngle(angleA, angleB) {
-      const diff = shortestAngleDiff(angleA, angleB);
-      return normalizeAngle(angleA + diff / 2);
-    }
+  LEVEL_R.forEach(r => {
+    svg.appendChild(el('circle', { cx: CX, cy: CY, r, fill: 'none', stroke: '#1c1c1f', 'stroke-width': 0.5 }));
+  });
+}
 
-    function clear(node) {
-      while (node.firstChild) node.removeChild(node.firstChild);
-    }
+// ---------- DESENHO DE CONECTOR (ARCO + LINHA) ----------
+function drawConnector(rOuter, angleA, angleB, rMid, childAngle, rInner, color, glowLevel, lineWidth) {
+  const g = el('g', {
+    fill: 'none',
+    stroke: color,
+    'stroke-width': lineWidth || 1.6,
+    'stroke-linecap': 'round',
+    'stroke-linejoin': 'round',
+    opacity: glowLevel > 0 ? 1 : 0.45
+  });
 
-    // ============================================
-    // PROCESSAMENTO DE DADOS
-    // ============================================
-    function processRounds(data) {
-      if (!data || !data.rounds) {
-        console.warn('⚠️ Dados inválidos ou sem rounds');
-        return [];
-      }
-      
-      const rounds = data.rounds.filter(r => r.matches && r.matches.length > 0);
-      
-      if (rounds.length === 0) {
-        console.warn('⚠️ Nenhuma fase com partidas encontrada');
-        return [];
-      }
-      
-      console.log('📊 Fases encontradas:', rounds.map(r => ({
-        key: r.key,
-        label: r.label,
-        matches: r.matches.length
-      })));
-      
-      return rounds;
-    }
+  if (glowLevel > 0) {
+    const idx = Math.min(glowLevel - 1, GLOW_AMOUNT.length - 1);
+    g.setAttribute('filter', `url(#glow-${idx})`);
+  }
 
-    // ============================================
-    // FUNÇÕES DE DESENHO
-    // ============================================
-    function drawBackground() {
-      const defs = el("defs", {});
-      
-      const grad = el("radialGradient", { id: "bgGlow", cx: "50%", cy: "50%", r: "50%" });
-      grad.appendChild(el("stop", { offset: "0%", "stop-color": "#3a2c0c", "stop-opacity": "0.6" }));
-      grad.appendChild(el("stop", { offset: "30%", "stop-color": "#1c1508", "stop-opacity": "0.4" }));
-      grad.appendChild(el("stop", { offset: "100%", "stop-color": "#0b0b0c", "stop-opacity": "1" }));
-      defs.appendChild(grad);
+  const [x1, y1] = polar(rOuter, angleA);
+  const [x2, y2] = polar(rOuter, angleB);
+  const [mx1, my1] = polar(rMid, angleA);
+  const [mx2, my2] = polar(rMid, angleB);
+  const [cx2, cy2] = polar(rInner, childAngle);
+  const [cmx, cmy] = polar(rMid, childAngle);
 
-      for (let i = 0; i < GLOW_AMOUNT.length; i++) {
-        const filter = el("filter", { 
-          id: `glow-${i}`, 
-          x: "-60%", y: "-60%", width: "220%", height: "220%" 
-        });
-        filter.appendChild(el("feGaussianBlur", { stdDeviation: GLOW_AMOUNT[i], result: "blur" }));
-        const merge = el("feMerge", {});
-        merge.appendChild(el("feMergeNode", { in: "blur" }));
-        merge.appendChild(el("feMergeNode", { in: "SourceGraphic" }));
-        filter.appendChild(merge);
-        defs.appendChild(filter);
-      }
+  const diff = angleDiff(angleA, angleB);
+  const large = Math.abs(diff) > 180 ? 1 : 0;
+  const sweep = diff >= 0 ? 1 : 0;
 
-      svg.appendChild(defs);
-      svg.appendChild(el("rect", { x: 0, y: 0, width: 1000, height: 1000, fill: "url(#bgGlow)" }));
+  const d =
+    `M${x1},${y1} L${mx1},${my1} ` +
+    `A${rMid},${rMid} 0 ${large} ${sweep} ${mx2},${my2} ` +
+    `L${x2},${y2} M${cmx},${cmy} L${cx2},${cy2}`;
 
-      LEVEL_R.forEach((r) => {
-        svg.appendChild(
-          el("circle", { cx: CX, cy: CY, r, fill: "none", stroke: "#1c1c1f", "stroke-width": 0.5 })
-        );
+  g.appendChild(el('path', { d }));
+  svg.appendChild(g);
+}
+
+// ---------- DESENHO DE UM NÓ (TIME) ----------
+function drawTeamNode(team, r, angle, branchColor, pending, size, glowLevel, isChampion) {
+  const [x, y] = polar(r, angle);
+  const g = el('g', { class: 'node', 'data-x': x, 'data-y': y });
+
+  const clipId = 'clip-' + Math.random().toString(36).slice(2);
+  const defs = el('defs');
+  const clip = el('clipPath', { id: clipId });
+  clip.appendChild(el('circle', { cx: x, cy: y, r: size / 2 }));
+  defs.appendChild(clip);
+  g.appendChild(defs);
+
+  const ring = el('circle', {
+    cx: x, cy: y,
+    r: size / 2 + 2.5,
+    fill: pending ? '#101012' : '#151517',
+    stroke: pending ? GREY : (isChampion ? '#d9a531' : branchColor),
+    'stroke-width': isChampion ? 3 : (pending ? 1.4 : 2.2)
+  });
+
+  if (glowLevel > 0 && !pending) {
+    const idx = Math.min(glowLevel - 1, GLOW_AMOUNT.length - 1);
+    ring.setAttribute('filter', `url(#glow-${idx})`);
+  }
+
+  if (isChampion) {
+    ring.setAttribute('stroke', '#d9a531');
+    ring.setAttribute('stroke-width', '3');
+    const anim = el('animate', {
+      attributeName: 'r',
+      values: `${size/2+2.5};${size/2+5};${size/2+2.5}`,
+      dur: '2s',
+      repeatCount: 'indefinite'
+    });
+    ring.appendChild(anim);
+  }
+  g.appendChild(ring);
+
+  if (team && team.logo) {
+    const img = el('image', {
+      x: x - size/2, y: y - size/2,
+      width: size, height: size,
+      href: team.logo,
+      'clip-path': `url(#${clipId})`,
+      class: `node-img${pending ? ' pending' : ''}${isChampion ? ' champion' : ''}`,
+      preserveAspectRatio: 'xMidYMid slice'
+    });
+    g.appendChild(img);
+  } else {
+    g.appendChild(el('circle', { cx: x, cy: y, r: size/2 - 4, fill: '#222226' }));
+  }
+
+  // (Confederação – mantido do original, pode ser adaptado)
+
+  // Eventos (tooltip)
+  if (team && team.name) {
+    g.addEventListener('mouseenter', (ev) => {
+      if (tooltip.classList.contains('pinned')) return;
+      showTooltip(ev, team);
+    });
+    g.addEventListener('mousemove', (ev) => {
+      if (tooltip.classList.contains('pinned')) return;
+      tooltip.style.left = (ev.clientX + 16) + 'px';
+      tooltip.style.top = (ev.clientY + 16) + 'px';
+    });
+    g.addEventListener('mouseleave', () => {
+      if (tooltip.classList.contains('pinned')) return;
+      tooltip.classList.remove('visible');
+    });
+    if (team.id && !pending) {
+      g.style.cursor = 'pointer';
+      g.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        showTeamDetails(ev, team);
       });
     }
+  }
 
-    function drawTrophy() {
-      const g = el("g", {});
-      g.appendChild(
-        el("circle", { cx: CX, cy: CY, r: 62, fill: "#0b0b0c", stroke: "#3a2c0c", "stroke-width": 2 })
-      );
-      const size = 76;
-      g.appendChild(
-        el("image", {
-          x: CX - size / 2,
-          y: CY - size / 2,
-          width: size,
-          height: size,
-          href: "/taca.gif",
-          preserveAspectRatio: "xMidYMid meet",
-          style: "filter: drop-shadow(0 0 30px rgba(217,165,49,0.4))",
-        })
-      );
-      svg.appendChild(g);
-    }
+  svg.appendChild(g);
+  return g;
+}
 
-    function drawConnector(rOuter, angleA, angleB, rMid, childAngle, rInner, color, glowLevel, lineWidth) {
-      const g = el("g", {
-        fill: "none",
-        stroke: color,
-        "stroke-width": lineWidth || 1.6,
-        "stroke-linecap": "round",
-        "stroke-linejoin": "round",
-        opacity: glowLevel > 0 ? 1 : 0.45,
-      });
-      
-      if (glowLevel > 0) {
-        const idx = Math.min(glowLevel - 1, GLOW_AMOUNT.length - 1);
-        g.setAttribute("filter", `url(#glow-${idx})`);
-      }
+// ---------- TOOLTIP ----------
+function showTooltip(ev, team) {
+  const match = team._matchData || {};
+  const isUpcoming = match.isUpcoming || match.status === 'SCHEDULED' || match.status === 'TIMED';
+  const isLive = match.isLive || match.status === 'IN_PLAY' || match.status === 'LIVE';
 
-      const [x1, y1] = polar(rOuter, angleA);
-      const [x2, y2] = polar(rOuter, angleB);
-      const [mx1, my1] = polar(rMid, angleA);
-      const [mx2, my2] = polar(rMid, angleB);
-      const [cx2, cy2] = polar(rInner, childAngle);
-      const [cmx, cmy] = polar(rMid, childAngle);
-
-      const diff = shortestAngleDiff(angleA, angleB);
-      const large = Math.abs(diff) > 180 ? 1 : 0;
-      const sweep = diff >= 0 ? 1 : 0;
-
-      const d = 
-        `M${x1},${y1} ` +
-        `L${mx1},${my1} ` +
-        `A${rMid},${rMid} 0 ${large} ${sweep} ${mx2},${my2} ` +
-        `L${x2},${y2} ` +
-        `M${cmx},${cmy} ` +
-        `L${cx2},${cy2}`;
-
-      g.appendChild(el("path", { d }));
-      svg.appendChild(g);
-    }
-
-    function teamNode(team, r, angle, branchColor, pending, size, glowLevel, isChampion) {
-      const [x, y] = polar(r, angle);
-      const g = el("g", { 
-        class: "node", 
-        "data-x": x, 
-        "data-y": y,
-        style: `--size: ${size}px`
-      });
-
-      const clipId = "clip-" + Math.random().toString(36).slice(2);
-      const defs = el("defs", {});
-      const clip = el("clipPath", { id: clipId });
-      clip.appendChild(el("circle", { cx: x, cy: y, r: size / 2 }));
-      defs.appendChild(clip);
-      g.appendChild(defs);
-
-      const ring = el("circle", {
-        cx: x, cy: y, r: size / 2 + 2.5,
-        fill: pending ? "#101012" : "#151517",
-        stroke: pending ? GREY : (isChampion ? "#d9a531" : branchColor),
-        "stroke-width": isChampion ? 3 : (pending ? 1.4 : 2.2),
-      });
-      
-      if (glowLevel > 0 && !pending) {
-        const idx = Math.min(glowLevel - 1, GLOW_AMOUNT.length - 1);
-        ring.setAttribute("filter", `url(#glow-${idx})`);
-      }
-      
-      if (isChampion) {
-        ring.setAttribute("stroke", "#d9a531");
-        ring.setAttribute("stroke-width", "3");
-        const anim = el("animate", {
-          attributeName: "r",
-          values: `${size/2 + 2.5};${size/2 + 5};${size/2 + 2.5}`,
-          dur: "2s",
-          repeatCount: "indefinite"
-        });
-        ring.appendChild(anim);
-      }
-      g.appendChild(ring);
-
-      if (team && team.logo) {
-        const img = el("image", {
-          x: x - size / 2, y: y - size / 2, width: size, height: size,
-          href: team.logo, 
-          "clip-path": `url(#${clipId})`,
-          class: `node-img${pending ? " pending" : ""}${isChampion ? " champion" : ""}`,
-          preserveAspectRatio: "xMidYMid slice",
-        });
-        g.appendChild(img);
-      } else {
-        g.appendChild(el("circle", { cx: x, cy: y, r: size / 2 - 4, fill: "#222226" }));
-      }
-
-      // Confederação
-      if (!pending && team && team.code) {
-        const conf = getConfederation(team.code);
-        if (conf) {
-          const badgeSize = Math.max(16, Math.round(size * 0.55));
-          const angleRad = Math.atan2(y - CY, x - CX);
-          const offset = size / 2 + badgeSize / 2 + 6;
-          const bx = x + Math.cos(angleRad) * offset;
-          const by = y + Math.sin(angleRad) * offset;
-          
-          const confPath = `/assets/img/federations/${team.code}.svg`;
-          
-          const bgCircle = el("circle", {
-            cx: bx,
-            cy: by,
-            r: badgeSize / 2 + 2,
-            fill: "#0b0b0c",
-            stroke: "rgba(255,255,255,0.1)",
-            "stroke-width": 1
-          });
-          g.appendChild(bgCircle);
-          
-          g.appendChild(el("image", {
-            x: bx - badgeSize / 2,
-            y: by - badgeSize / 2,
-            width: badgeSize,
-            height: badgeSize,
-            href: confPath,
-            class: "conf-badge",
-            preserveAspectRatio: "xMidYMid meet",
-            onerror: "this.style.display='none'"
-          }));
-        }
-      }
-
-      // Eventos
-      if (team && team.name) {
-        g.addEventListener("mouseenter", (ev) => {
-          if (tooltip.classList.contains("pinned")) return;
-          showTooltip(ev, team);
-        });
-        g.addEventListener("mousemove", (ev) => {
-          if (tooltip.classList.contains("pinned")) return;
-          tooltip.style.left = (ev.clientX + 16) + "px";
-          tooltip.style.top = (ev.clientY + 16) + "px";
-        });
-        g.addEventListener("mouseleave", () => {
-          if (tooltip.classList.contains("pinned")) return;
-          tooltip.classList.remove("visible");
-        });
-        if (team.id && !pending) {
-          g.style.cursor = "pointer";
-          g.addEventListener("click", (ev) => {
-            ev.stopPropagation();
-            showTeamDetails(ev, team);
-          });
-        }
-      }
-
-      svg.appendChild(g);
-      allNodeGroups.push(g);
-      return g;
-    }
-
-    // ============================================
-    // TOOLTIP
-    // ============================================
-    function showTooltip(ev, team) {
-      const match = team._matchData || {};
-      const isUpcoming = match.isUpcoming || match.status === 'SCHEDULED' || match.status === 'TIMED';
-      const isLive = match.isLive || match.status === 'IN_PLAY' || match.status === 'LIVE';
-      
-      let html = '';
-      
-      if (isUpcoming) {
-        html = `
-          <div class="tt-upcoming">
-            <span class="tt-badge">⏰ ${match.statusLabel || 'EM BREVE'}</span>
-            <div class="tt-teams">
-              ${match.homeName || '—'} <strong>vs</strong> ${match.awayName || '—'}
-            </div>
-            <div class="tt-datetime">
-              <span>📅 ${match.date || '--/--'}</span>
-              <span>🕘 ${match.time || '--:--'}</span>
-            </div>
-            <div class="tt-stage">${match.stage || 'Fase eliminatória'}</div>
-          </div>
-        `;
-      } else if (isLive) {
-        html = `
-          <div class="tt-header">
-            <span class="tt-live-indicator"></span>
-            <span style="color: #ff3b30; font-weight: 700; font-size: 11px;">AO VIVO</span>
-          </div>
-          <div class="tt-header" style="margin-top: 2px;">
-            <img src="${team.logo || ''}" alt="${team.name}">
-            <span>${team.name}</span>
-            <span class="tt-vs">vs</span>
-            <img src="${match.opponent?.logo || ''}" alt="${match.opponent?.name || ''}">
-            <span>${match.opponent?.name || '—'}</span>
-          </div>
-          <div class="tt-score">${match.score || '0 × 0'}</div>
-          <div class="tt-details">
-            <span>🏆 ${match.stage || 'Fase'}</span>
-            <span>📅 ${match.date || '--/--'}</span>
-            <span>🕘 ${match.time || '--:--'}</span>
-          </div>
-        `;
-      } else {
-        html = `
-          <div class="tt-header">
-            <img src="${team.logo || ''}" alt="${team.name}">
-            <span>${team.name}</span>
-            <span class="tt-vs">vs</span>
-            <img src="${match.opponent?.logo || ''}" alt="${match.opponent?.name || ''}">
-            <span>${match.opponent?.name || '—'}</span>
-          </div>
-          <div class="tt-score">${match.score || '—'}</div>
-          <div class="tt-details">
-            <span>🏆 ${match.stage || 'Fase'}</span>
-            <span>📅 ${match.date || '--/--'}</span>
-            <span style="color: #34c759;">✅ ENCERRADO</span>
-          </div>
-        `;
-      }
-
-      tooltip.innerHTML = html;
-      tooltip.classList.add("visible");
-    }
-
-    function showTeamDetails(ev, team) {
-      tooltip.style.left = (ev.clientX + 16) + "px";
-      tooltip.style.top = (ev.clientY + 16) + "px";
-      tooltip.innerHTML = `
-        <div class="tt-header">
-          <img src="${team.logo || ''}" alt="${team.name}">
-          <span>${team.name}</span>
-          <span class="tt-close" id="ttClose">✕</span>
+  let html = '';
+  if (isUpcoming) {
+    html = `
+      <div class="tt-upcoming">
+        <span class="tt-badge">⏰ ${match.statusLabel || 'EM BREVE'}</span>
+        <div class="tt-teams">${match.homeName || '—'} <strong>vs</strong> ${match.awayName || '—'}</div>
+        <div class="tt-datetime">
+          <span>📅 ${match.date || '--/--'}</span>
+          <span>🕘 ${match.time || '--:--'}</span>
         </div>
-        <div class="tt-loading">Carregando…</div>
-      `;
-      tooltip.classList.add("visible", "pinned");
-      document.getElementById("ttClose")?.addEventListener("click", (e) => {
-        e.stopPropagation();
-        tooltip.classList.remove("visible", "pinned");
-      });
+        <div class="tt-stage">${match.stage || 'Fase eliminatória'}</div>
+      </div>
+    `;
+  } else if (isLive) {
+    html = `
+      <div class="tt-header">
+        <span class="tt-live-indicator"></span>
+        <span style="color:#ff3b30;font-weight:700;font-size:11px;">AO VIVO</span>
+      </div>
+      <div class="tt-header">
+        <img src="${team.logo || ''}" alt="${team.name}">
+        <span>${team.name}</span>
+        <span class="tt-vs">vs</span>
+        <img src="${match.opponent?.logo || ''}" alt="${match.opponent?.name || ''}">
+        <span>${match.opponent?.name || '—'}</span>
+      </div>
+      <div class="tt-score">${match.score || '0 × 0'}</div>
+      <div class="tt-details">
+        <span>🏆 ${match.stage || 'Fase'}</span>
+        <span>📅 ${match.date || '--/--'}</span>
+        <span>🕘 ${match.time || '--:--'}</span>
+      </div>
+    `;
+  } else {
+    html = `
+      <div class="tt-header">
+        <img src="${team.logo || ''}" alt="${team.name}">
+        <span>${team.name}</span>
+        <span class="tt-vs">vs</span>
+        <img src="${match.opponent?.logo || ''}" alt="${match.opponent?.name || ''}">
+        <span>${match.opponent?.name || '—'}</span>
+      </div>
+      <div class="tt-score">${match.score || '—'}</div>
+      <div class="tt-details">
+        <span>🏆 ${match.stage || 'Fase'}</span>
+        <span>📅 ${match.date || '--/--'}</span>
+        <span style="color:#34c759;">✅ ENCERRADO</span>
+      </div>
+    `;
+  }
+  tooltip.innerHTML = html;
+  tooltip.classList.add('visible');
+}
 
-      // Tentar buscar dados reais, se falhar usar mock
-      fetch(`/api/team-info?teamId=${team.id}`)
-        .then((r) => r.json())
-        .then((data) => {
-          updateTooltipWithData(team, data);
-        })
-        .catch(() => {
-          // Fallback com dados mock
-          updateTooltipWithData(team, {
-            lastMatch: {
-              homeTeam: "Brasil",
-              awayTeam: "Japão",
-              homeScore: 2,
-              awayScore: 0
-            },
-            topScorer: {
-              name: "Vinícius Júnior",
-              goals: 4
-            }
-          });
-        });
-    }
+function showTeamDetails(ev, team) {
+  // (mesmo do original, com fallback)
+  tooltip.style.left = (ev.clientX + 16) + 'px';
+  tooltip.style.top = (ev.clientY + 16) + 'px';
+  tooltip.innerHTML = `
+    <div class="tt-header">
+      <img src="${team.logo || ''}" alt="${team.name}">
+      <span>${team.name}</span>
+      <span class="tt-close" id="ttClose">✕</span>
+    </div>
+    <div class="tt-loading">Carregando…</div>
+  `;
+  tooltip.classList.add('visible', 'pinned');
+  document.getElementById('ttClose')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    tooltip.classList.remove('visible', 'pinned');
+  });
 
-    function updateTooltipWithData(team, data) {
+  fetch(`/api/team-info?teamId=${team.id}`)
+    .then(r => r.json())
+    .then(data => {
       const lm = data.lastMatch;
       const ts = data.topScorer;
       const lastMatchHtml = lm
         ? `${lm.homeTeam} <strong>${lm.homeScore ?? '?'} × ${lm.awayScore ?? '?'}</strong> ${lm.awayTeam}`
         : 'Sem jogos encerrados ainda.';
       const scorerHtml = ts
-        ? `
-          <div class="tt-scorer-row">
-            <img class="tt-scorer-photo" src="/assets/img/art/${encodeURIComponent(ts.name)}.png" alt="${ts.name}" onerror="this.style.display='none'">
-            <span>${ts.name} — ${ts.goals} gol${ts.goals === 1 ? '' : 's'}</span>
-          </div>
-        `
+        ? `<div class="tt-scorer-row"><img class="tt-scorer-photo" src="/assets/img/art/${encodeURIComponent(ts.name)}.png" alt="${ts.name}" onerror="this.style.display='none'"><span>${ts.name} — ${ts.goals} gol${ts.goals === 1 ? '' : 's'}</span></div>`
         : 'Sem dados disponíveis.';
-      
       tooltip.innerHTML = `
         <div class="tt-header">
           <img src="${team.logo || ''}" alt="${team.name}">
@@ -1099,158 +758,287 @@
         <div class="tt-info-row"><strong>Último jogo:</strong><br>${lastMatchHtml}</div>
         <div class="tt-info-row"><strong>Artilheiro da seleção:</strong>${scorerHtml}</div>
       `;
-      document.getElementById("ttClose")?.addEventListener("click", (e) => {
+      document.getElementById('ttClose')?.addEventListener('click', (e) => {
         e.stopPropagation();
-        tooltip.classList.remove("visible", "pinned");
+        tooltip.classList.remove('visible', 'pinned');
       });
-    }
-
-    document.addEventListener("click", () => {
-      if (tooltip.classList.contains("pinned")) {
-        tooltip.classList.remove("visible", "pinned");
-      }
+    })
+    .catch(() => {
+      tooltip.innerHTML = `
+        <div class="tt-header"><span>${team.name}</span><span class="tt-close" id="ttClose">✕</span></div>
+        <div class="tt-details">Não foi possível carregar os dados agora.</div>
+      `;
+      document.getElementById('ttClose')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        tooltip.classList.remove('visible', 'pinned');
+      });
     });
+}
 
-    // ============================================
-    // LIVE PANEL
-    // ============================================
-    function updateLivePanel(data) {
-      const matches = [];
-      if (data.rounds) {
-        for (const round of data.rounds) {
-          for (const m of round.matches) {
-            matches.push(m);
-          }
-        }
-      }
+document.addEventListener('click', () => {
+  if (tooltip.classList.contains('pinned')) {
+    tooltip.classList.remove('visible', 'pinned');
+  }
+});
 
-      const now = new Date();
-      let liveMatch = null;
-      let nextMatch = null;
-      let earliestFuture = null;
-
-      for (const m of matches) {
-        const matchDate = new Date(m.date);
-        const status = m.status || 'SCHEDULED';
-        
-        if (status === 'IN_PLAY' || status === 'LIVE' || status === 'PAUSED') {
-          if (!liveMatch) liveMatch = m;
-        } else if (status === 'FINISHED') {
-          continue;
-        } else {
-          if (matchDate > now) {
-            if (!earliestFuture || matchDate < earliestFuture.date) {
-              earliestFuture = { match: m, date: matchDate };
-            }
-          }
-        }
-      }
-
-      if (!liveMatch && earliestFuture) {
-        nextMatch = earliestFuture.match;
-      } else if (liveMatch) {
-        for (const m of matches) {
-          const matchDate = new Date(m.date);
-          if (matchDate > new Date(liveMatch.date)) {
-            if (!nextMatch || matchDate < new Date(nextMatch.date)) {
-              nextMatch = m;
-            }
-          }
-        }
-      }
-
-      livePanel.classList.toggle("no-live", !liveMatch);
-
-      if (liveMatch) {
-        const home = liveMatch.home;
-        const away = liveMatch.away;
-        const score = liveMatch.score;
-        const homeScore = score?.home ?? '—';
-        const awayScore = score?.away ?? '—';
-        const status = liveMatch.status || 'SCHEDULED';
-        
-        document.getElementById('liveHome').textContent = home.name || '—';
-        document.getElementById('liveAway').textContent = away.name || '—';
-        document.getElementById('liveScore').textContent = `${homeScore} × ${awayScore}`;
-        document.getElementById('liveTime').textContent = `• ${new Date(liveMatch.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`;
-        document.getElementById('liveStatus').textContent = STATUS_LABELS[status] || status;
-        document.getElementById('liveStatus').className = `status-badge status-${status === 'FINISHED' ? 'finished' : (status === 'IN_PLAY' || status === 'LIVE' ? 'live' : 'upcoming')}`;
-        
-        const homeImg = document.querySelector('#liveTeams img:first-child');
-        const awayImg = document.querySelector('#liveTeams img:last-child');
-        if (homeImg) homeImg.src = home.logo || '';
-        if (awayImg) awayImg.src = away.logo || '';
-        document.querySelector('.live-badge').textContent = status === 'FINISHED' ? '✓ ENCERRADO' : '● AO VIVO';
-      }
-
-      if (nextMatch) {
-        const home = nextMatch.home;
-        const away = nextMatch.away;
-        const date = new Date(nextMatch.date);
-        document.querySelector('.next-match').style.opacity = '1';
-        document.getElementById('nextHome').textContent = home.name || '—';
-        document.getElementById('nextAway').textContent = away.name || '—';
-        document.getElementById('nextDateTime').textContent = 
-          `📅 ${date.toLocaleDateString('pt-BR')} • 🕘 ${date.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`;
-        const homeImg = document.querySelector('#nextTeams img:first-child');
-        const awayImg = document.querySelector('#nextTeams img:last-child');
-        if (homeImg) homeImg.src = home.logo || '';
-        if (awayImg) awayImg.src = away.logo || '';
-      } else {
-        document.querySelector('.next-match').style.opacity = '0.5';
-        document.getElementById('nextHome').textContent = '—';
-        document.getElementById('nextAway').textContent = '—';
-        document.getElementById('nextDateTime').textContent = '📅 --/-- • 🕘 --:--';
+// ---------- LIVE PANEL ----------
+function updateLivePanel(data) {
+  // (igual ao original, pode ser mantido)
+  const matches = [];
+  if (data.rounds) {
+    for (const round of data.rounds) {
+      for (const m of round.matches) {
+        matches.push(m);
       }
     }
+  }
 
-    // ============================================
-// RENDERIZAÇÃO PRINCIPAL (CORRIGIDA)
-// ============================================
+  const now = new Date();
+  let liveMatch = null;
+  let nextMatch = null;
+  let earliestFuture = null;
+
+  for (const m of matches) {
+    const matchDate = new Date(m.date);
+    const status = m.status || 'SCHEDULED';
+    if (status === 'IN_PLAY' || status === 'LIVE' || status === 'PAUSED') {
+      if (!liveMatch) liveMatch = m;
+    } else if (status === 'FINISHED') {
+      continue;
+    } else {
+      if (matchDate > now) {
+        if (!earliestFuture || matchDate < earliestFuture.date) {
+          earliestFuture = { match: m, date: matchDate };
+        }
+      }
+    }
+  }
+
+  if (!liveMatch && earliestFuture) {
+    nextMatch = earliestFuture.match;
+  } else if (liveMatch) {
+    for (const m of matches) {
+      const matchDate = new Date(m.date);
+      if (matchDate > new Date(liveMatch.date)) {
+        if (!nextMatch || matchDate < new Date(nextMatch.date)) {
+          nextMatch = m;
+        }
+      }
+    }
+  }
+
+  livePanel.classList.toggle('no-live', !liveMatch);
+
+  if (liveMatch) {
+    const home = liveMatch.home;
+    const away = liveMatch.away;
+    const score = liveMatch.score;
+    const homeScore = score?.home ?? '—';
+    const awayScore = score?.away ?? '—';
+    const status = liveMatch.status || 'SCHEDULED';
+
+    document.getElementById('liveHome').textContent = home.name || '—';
+    document.getElementById('liveAway').textContent = away.name || '—';
+    document.getElementById('liveScore').textContent = `${homeScore} × ${awayScore}`;
+    document.getElementById('liveTime').textContent = `• ${new Date(liveMatch.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`;
+    document.getElementById('liveStatus').textContent = STATUS_LABELS[status] || status;
+    document.getElementById('liveStatus').className = `status-badge status-${status === 'FINISHED' ? 'finished' : (status === 'IN_PLAY' || status === 'LIVE' ? 'live' : 'upcoming')}`;
+
+    const homeImg = document.querySelector('#liveTeams img:first-child');
+    const awayImg = document.querySelector('#liveTeams img:last-child');
+    if (homeImg) homeImg.src = home.logo || '';
+    if (awayImg) awayImg.src = away.logo || '';
+    document.querySelector('.live-badge').textContent = status === 'FINISHED' ? '✓ ENCERRADO' : '● AO VIVO';
+  }
+
+  if (nextMatch) {
+    const home = nextMatch.home;
+    const away = nextMatch.away;
+    const date = new Date(nextMatch.date);
+    document.querySelector('.next-match').style.opacity = '1';
+    document.getElementById('nextHome').textContent = home.name || '—';
+    document.getElementById('nextAway').textContent = away.name || '—';
+    document.getElementById('nextDateTime').textContent =
+      `📅 ${date.toLocaleDateString('pt-BR')} • 🕘 ${date.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`;
+    const homeImg = document.querySelector('#nextTeams img:first-child');
+    const awayImg = document.querySelector('#nextTeams img:last-child');
+    if (homeImg) homeImg.src = home.logo || '';
+    if (awayImg) awayImg.src = away.logo || '';
+  } else {
+    document.querySelector('.next-match').style.opacity = '0.5';
+    document.getElementById('nextHome').textContent = '—';
+    document.getElementById('nextAway').textContent = '—';
+    document.getElementById('nextDateTime').textContent = '📅 --/-- • 🕘 --:--';
+  }
+}
+
+// ---------- RENDERIZAÇÃO PRINCIPAL (CIRCULAR) ----------
 function render(data) {
   clear(svg);
-  allNodeGroups = [];
   drawBackground();
 
-  const rounds = processRounds(data);
-  if (rounds.length === 0) {
-    statusEl.innerHTML = `⚠️ Nenhum jogo do mata-mata encontrado.`;
+  const rounds = data.rounds || [];
+  const validRounds = rounds.filter(r => r.matches && r.matches.length > 0);
+
+  if (validRounds.length === 0) {
+    statusEl.innerHTML = '⚠️ Nenhuma fase encontrada.';
     return;
   }
 
-  let previousNodes = [];
+  console.log(`📊 Renderizando ${validRounds.length} fases (circular)`);
 
-  for (let ri = 0; ri < rounds.length; ri++) {
-    const round = rounds[ri];
-    const matches = round.matches || [];
-    const isFirstRound = (ri === 0);
-    const r = LEVEL_R[ri] || LEVEL_R[LEVEL_R.length - 1];
+  // ---------- 1. DESENHAR NÓS DA PRIMEIRA FASE ----------
+  const firstRound = validRounds[0];
+  const totalMatches = firstRound.matches.length;
+  const firstRadius = LEVEL_R[0];
+  const firstSize = NODE_SIZE[0];
+
+  // Mapear cada match para um ângulo
+  firstRound.matches.forEach((match, idx) => {
+    const step = 360 / totalMatches;
+    const baseAngle = idx * step;
+    const branchIdx = Math.floor(idx / (totalMatches / 8)) % 8;
+
+    // Time da casa
+    const homeAngle = normalizeAngle(baseAngle - step * 0.2);
+    let homeTeam = match.home || { name: 'TBD', logo: null, id: null, code: null };
+    homeTeam._matchData = {
+      opponent: match.away,
+      homeName: homeTeam.name,
+      awayName: match.away?.name || '—',
+      score: match.score ? `${match.score.home ?? '?'} × ${match.score.away ?? '?'}` : '—',
+      stage: firstRound.label,
+      date: new Date(match.date).toLocaleDateString('pt-BR'),
+      time: new Date(match.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      status: match.status || 'SCHEDULED',
+      isUpcoming: ['SCHEDULED', 'TIMED'].includes(match.status),
+      isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
+      isFinished: match.status === 'FINISHED',
+      statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE'
+    };
+    const pendingHome = !homeTeam.id || homeTeam.name === 'TBD';
+    drawTeamNode(homeTeam, firstRadius, homeAngle, pendingHome ? GREY : BRANCH_COLORS[branchIdx], pendingHome, firstSize, 0, false);
+
+    // Time visitante
+    const awayAngle = normalizeAngle(baseAngle + step * 0.2);
+    let awayTeam = match.away || { name: 'TBD', logo: null, id: null, code: null };
+    awayTeam._matchData = {
+      opponent: match.home,
+      homeName: match.home?.name || '—',
+      awayName: awayTeam.name,
+      score: match.score ? `${match.score.home ?? '?'} × ${match.score.away ?? '?'}` : '—',
+      stage: firstRound.label,
+      date: new Date(match.date).toLocaleDateString('pt-BR'),
+      time: new Date(match.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      status: match.status || 'SCHEDULED',
+      isUpcoming: ['SCHEDULED', 'TIMED'].includes(match.status),
+      isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
+      isFinished: match.status === 'FINISHED',
+      statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE'
+    };
+    const pendingAway = !awayTeam.id || awayTeam.name === 'TBD';
+    drawTeamNode(awayTeam, firstRadius, awayAngle, pendingAway ? GREY : BRANCH_COLORS[branchIdx], pendingAway, firstSize, 0, false);
+  });
+
+  // ---------- 2. CONSTRUIR LISTA DE NÓS PARA CONEXÕES ----------
+  // Vamos armazenar os ângulos de cada nó por fase, indexados por posição
+  const nodesByRound = [];
+  // Primeira fase: todos os nós (home e away) em ordem
+  const firstNodes = [];
+  firstRound.matches.forEach((match, idx) => {
+    const step = 360 / totalMatches;
+    const baseAngle = idx * step;
+    firstNodes.push({ angle: normalizeAngle(baseAngle - step * 0.2), match });
+    firstNodes.push({ angle: normalizeAngle(baseAngle + step * 0.2), match });
+  });
+  nodesByRound.push(firstNodes);
+
+  // ---------- 3. DESENHAR FASES SEGUINTES E CONECTORES ----------
+  for (let ri = 1; ri < validRounds.length; ri++) {
+    const round = validRounds[ri];
+    const matches = round.matches;
+    const radius = LEVEL_R[ri] || LEVEL_R[LEVEL_R.length - 1];
     const sizeIdx = Math.min(ri, NODE_SIZE.length - 1);
     const size = NODE_SIZE[sizeIdx];
+    const prevNodes = nodesByRound[ri - 1];
+    const totalPrev = prevNodes.length;
 
-    if (isFirstRound) {
-      // ---------- PRIMEIRA FASE: distribuição uniforme (0 a 360) ----------
-      const totalMatches = matches.length;
-      const nodes = [];
+    // Cada match da fase atual consome 2 nós da fase anterior (por posição)
+    const currentNodes = [];
 
-      matches.forEach((match, idx) => {
-        // Cada match ocupa um setor de 360/totalMatches graus
-        const sectorAngle = 360 / totalMatches;
-        const baseAngle = idx * sectorAngle; // ângulo central do setor
-        const branchIdx = Math.floor(idx / (totalMatches / 8)) % 8;
+    matches.forEach((match, idx) => {
+      const parentIdx1 = idx * 2;
+      const parentIdx2 = idx * 2 + 1;
 
-        // --- Time da casa ---
-        const homeAngle = normalizeAngle(baseAngle - sectorAngle * 0.2);
-        let homeTeam = match.home;
-        if (!homeTeam || homeTeam.name === 'TBD') {
-          homeTeam = { name: 'TBD', logo: null, id: null, code: null };
+      // Ângulos dos pais (fallback para TBD se não existir)
+      let angleA, angleB;
+      if (parentIdx1 < totalPrev) {
+        angleA = prevNodes[parentIdx1].angle;
+      } else {
+        angleA = (totalPrev > 0) ? prevNodes[totalPrev - 1].angle : 0;
+      }
+      if (parentIdx2 < totalPrev) {
+        angleB = prevNodes[parentIdx2].angle;
+      } else {
+        angleB = (totalPrev > 0) ? prevNodes[totalPrev - 1].angle + 10 : 10;
+      }
+
+      const childAngle = midAngle(angleA, angleB);
+
+      // Determinar vencedor
+      let winnerTeam = null;
+      let decided = false;
+      if (match.winnerId) {
+        decided = true;
+        winnerTeam = (match.home?.id === match.winnerId) ? match.home : match.away;
+      } else if (match.status === 'FINISHED' && match.score) {
+        const h = match.score?.home || 0;
+        const a = match.score?.away || 0;
+        if (h > a) { decided = true; winnerTeam = match.home; }
+        else if (a > h) { decided = true; winnerTeam = match.away; }
+        else if (match.score?.penalties) {
+          const ph = match.score.penalties?.home || 0;
+          const pa = match.score.penalties?.away || 0;
+          if (ph > pa) { decided = true; winnerTeam = match.home; }
+          else if (pa > ph) { decided = true; winnerTeam = match.away; }
         }
-        homeTeam._matchData = {
-          opponent: match.away,
-          homeName: homeTeam.name,
+      }
+
+      // Cor do ramo
+      const branchIdx = decided ?
+        (winnerTeam?.id === match.home?.id ? (prevNodes[parentIdx1]?.branchIdx || 0) : (prevNodes[parentIdx2]?.branchIdx || 0)) :
+        (prevNodes[parentIdx1]?.branchIdx || 0);
+      const color = decided ? BRANCH_COLORS[branchIdx] : GREY;
+
+      // Desenhar conector
+      const rMid = (LEVEL_R[ri-1] + LEVEL_R[ri]) / 2;
+      const glowLevel = Math.min(ri, GLOW_AMOUNT.length - 1);
+      const lineWidth = Math.min(ri + 1, 5);
+
+      drawConnector(
+        LEVEL_R[ri-1],
+        angleA,
+        angleB,
+        rMid,
+        childAngle,
+        LEVEL_R[ri],
+        color,
+        glowLevel,
+        lineWidth
+      );
+
+      // Criar nó do vencedor (ou TBD)
+      const teamObj = winnerTeam || {
+        name: 'TBD',
+        logo: null,
+        id: null,
+        code: null,
+        _matchData: {
+          opponent: null,
+          homeName: match.home?.name || '—',
           awayName: match.away?.name || '—',
           score: match.score ? `${match.score.home ?? '?'} × ${match.score.away ?? '?'}` : '—',
-          stage: round.label,
+          stage: round.label || `Fase ${ri + 1}`,
           date: new Date(match.date).toLocaleDateString('pt-BR'),
           time: new Date(match.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
           status: match.status || 'SCHEDULED',
@@ -1258,194 +1046,76 @@ function render(data) {
           isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
           isFinished: match.status === 'FINISHED',
           statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE'
-        };
-        const pendingHome = !homeTeam.id || homeTeam.name === 'TBD';
-        teamNode(homeTeam, r, homeAngle, pendingHome ? GREY : BRANCH_COLORS[branchIdx], pendingHome, size, 0, false);
-        nodes.push({ team: homeTeam, angle: homeAngle, branchIdx });
-
-        // --- Time visitante ---
-        const awayAngle = normalizeAngle(baseAngle + sectorAngle * 0.2);
-        let awayTeam = match.away;
-        if (!awayTeam || awayTeam.name === 'TBD') {
-          awayTeam = { name: 'TBD', logo: null, id: null, code: null };
         }
-        awayTeam._matchData = {
-          opponent: match.home,
-          homeName: match.home?.name || '—',
-          awayName: awayTeam.name,
-          score: match.score ? `${match.score.home ?? '?'} × ${match.score.away ?? '?'}` : '—',
-          stage: round.label,
-          date: new Date(match.date).toLocaleDateString('pt-BR'),
-          time: new Date(match.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-          status: match.status || 'SCHEDULED',
-          isUpcoming: ['SCHEDULED', 'TIMED'].includes(match.status),
-          isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
-          isFinished: match.status === 'FINISHED',
-          statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE'
-        };
-        const pendingAway = !awayTeam.id || awayTeam.name === 'TBD';
-        teamNode(awayTeam, r, awayAngle, pendingAway ? GREY : BRANCH_COLORS[branchIdx], pendingAway, size, 0, false);
-        nodes.push({ team: awayTeam, angle: awayAngle, branchIdx });
+      };
+      if (winnerTeam) {
+        teamObj._matchData.opponent = (match.home?.id === winnerTeam.id) ? match.away : match.home;
+      }
+
+      const isChampion = (ri === validRounds.length - 1) && decided && matches.length === 1;
+      drawTeamNode(
+        teamObj,
+        LEVEL_R[ri],
+        childAngle,
+        decided ? BRANCH_COLORS[branchIdx] : GREY,
+        !decided,
+        size,
+        decided ? glowLevel : 0,
+        isChampion
+      );
+
+      // Guardar para próxima fase
+      currentNodes.push({
+        angle: childAngle,
+        branchIdx: branchIdx,
+        match: match,
+        team: teamObj
       });
+    });
 
-      previousNodes = nodes;
-      console.log(`📌 Fase ${ri} (${round.key}) criou ${nodes.length} nós com distribuição uniforme`);
-
-    } else {
-      // ---------- FASES SEGUINTES: matching por ID (usando fixtureId) ----------
-      const currentNodes = [];
-
-      matches.forEach((match) => {
-        // CORREÇÃO: usar fixtureId em vez de id (que é undefined)
-        const matchId = match.fixtureId || match.id;
-
-        // Procurar os pais pelo ID do time (não pela posição)
-        const homeParent = previousNodes.find(n => n.team.id === match.home?.id);
-        const awayParent = previousNodes.find(n => n.team.id === match.away?.id);
-
-        if (!homeParent || !awayParent) {
-          console.warn(`⚠️ Pais não encontrados para match ${matchId}`, match);
-          return;
-        }
-
-        const childAngle = calculateMidAngle(homeParent.angle, awayParent.angle);
-
-        // Determinar vencedor
-        let winnerTeam = null;
-        let decided = false;
-        if (match.winnerId) {
-          decided = true;
-          winnerTeam = (match.home?.id === match.winnerId) ? match.home : match.away;
-        } else if (match.status === 'FINISHED' && match.score) {
-          const homeScore = match.score?.home || 0;
-          const awayScore = match.score?.away || 0;
-          if (homeScore > awayScore) { decided = true; winnerTeam = match.home; }
-          else if (awayScore > homeScore) { decided = true; winnerTeam = match.away; }
-          else if (match.score?.penalties) {
-            const penHome = match.score.penalties?.home || 0;
-            const penAway = match.score.penalties?.away || 0;
-            if (penHome > penAway) { decided = true; winnerTeam = match.home; }
-            else if (penAway > penHome) { decided = true; winnerTeam = match.away; }
-          }
-        }
-
-        const branchIdx = decided ?
-          (winnerTeam?.id === match.home?.id ? homeParent.branchIdx : awayParent.branchIdx) :
-          homeParent.branchIdx;
-        const color = decided ? BRANCH_COLORS[branchIdx] : GREY;
-
-        const rMid = (LEVEL_R[ri-1] + LEVEL_R[ri]) / 2;
-        const glowLevel = Math.min(ri, GLOW_AMOUNT.length - 1);
-        const lineWidth = Math.min(ri + 1, LINE_WIDTH.length - 1);
-
-        drawConnector(
-          LEVEL_R[ri-1],
-          homeParent.angle,
-          awayParent.angle,
-          rMid,
-          childAngle,
-          LEVEL_R[ri],
-          color,
-          glowLevel,
-          lineWidth
-        );
-
-        const teamObj = winnerTeam || {
-          name: 'TBD',
-          logo: null,
-          id: null,
-          code: null,
-          _matchData: {
-            opponent: null,
-            homeName: match.home?.name || '—',
-            awayName: match.away?.name || '—',
-            score: match.score ? `${match.score.home ?? '?'} × ${match.score.away ?? '?'}` : '—',
-            stage: round.label || `Fase ${ri + 1}`,
-            date: new Date(match.date).toLocaleDateString('pt-BR'),
-            time: new Date(match.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-            status: match.status || 'SCHEDULED',
-            isUpcoming: ['SCHEDULED', 'TIMED'].includes(match.status),
-            isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
-            isFinished: match.status === 'FINISHED',
-            statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE'
-          }
-        };
-        if (winnerTeam) {
-          teamObj._matchData.opponent = (match.home?.id === winnerTeam.id) ? match.away : match.home;
-        }
-
-        const isChampion = (ri === rounds.length - 1) && decided && matches.length === 1;
-        teamNode(
-          teamObj,
-          LEVEL_R[ri],
-          childAngle,
-          decided ? BRANCH_COLORS[branchIdx] : GREY,
-          !decided,
-          size,
-          decided ? glowLevel : 0,
-          isChampion
-        );
-
-        currentNodes.push({
-          team: teamObj,
-          angle: childAngle,
-          branchIdx: branchIdx,
-          decided: decided
-        });
-      });
-
-      previousNodes = currentNodes;
-    }
+    nodesByRound.push(currentNodes);
   }
 
-  drawTrophy();
+  // ---------- 4. TAÇA NO CENTRO ----------
+  const trophyG = el('g');
+  trophyG.appendChild(el('circle', { cx: CX, cy: CY, r: 62, fill: '#0b0b0c', stroke: '#3a2c0c', 'stroke-width': 2 }));
+  const trophySize = 76;
+  trophyG.appendChild(el('image', {
+    x: CX - trophySize/2,
+    y: CY - trophySize/2,
+    width: trophySize,
+    height: trophySize,
+    href: '/taca.gif',
+    preserveAspectRatio: 'xMidYMid meet',
+    style: 'filter: drop-shadow(0 0 30px rgba(217,165,49,0.4))'
+  }));
+  svg.appendChild(trophyG);
+
+  // ---------- 5. ATUALIZAR UI ----------
   updateLivePanel(data);
-
-  const ts = new Date(data.updatedAt).toLocaleString("pt-BR");
-  statusEl.innerHTML = `Atualizado em ${ts} <button id="refreshBtn">Atualizar agora</button>`;
-  document.getElementById("refreshBtn")?.addEventListener("click", load);
+  const ts = new Date(data.updatedAt).toLocaleString('pt-BR');
+  statusEl.innerHTML = `Atualizado em ${ts} <button id="refreshBtn">↻ Atualizar</button>`;
+  document.getElementById('refreshBtn')?.addEventListener('click', load);
 }
-    // ============================================
-    // LOAD E ATUALIZAÇÃO
-    // ============================================
-    async function load() {
-      statusEl.textContent = "Atualizando…";
-      try {
-        // Tenta buscar da API real
-        const res = await fetch("/api/bracket", { cache: "no-store" });
-        
-        if (res.ok) {
-          const data = await res.json();
-          if (data.rounds && data.rounds.length > 0) {
-            currentData = data;
-            render(data);
-            return;
-          }
-        }
-        
-        // Fallback para dados mock se a API não retornar dados
-        console.warn('⚠️ Usando dados mock para demonstração');
-        const mockData = getMockData();
-        currentData = mockData;
-        render(mockData);
-        statusEl.innerHTML = `📊 Dados de demonstração (mock) - ${new Date().toISOString()}`;
-        
-      } catch (err) {
-        console.error('Erro ao carregar:', err);
-        // Usar mock em caso de erro
-        const mockData = getMockData();
-        currentData = mockData;
-        render(mockData);
-        statusEl.innerHTML = `📊 Dados de demonstração (mock) - ${new Date().toISOString()}`;
-      }
-    }
 
-    // ============================================
-    // INICIALIZAÇÃO
-    // ============================================
-    document.getElementById("refreshBtn")?.addEventListener("click", load);
-    load();
-    setInterval(load, POLL_MS);
+// ---------- LOAD & POLLING ----------
+async function load() {
+  statusEl.textContent = 'Atualizando…';
+  try {
+    const res = await fetch('/api/bracket', { cache: 'no-store' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro desconhecido');
+    currentData = data;
+    render(data);
+  } catch (err) {
+    svg.innerHTML = '';
+    statusEl.innerHTML = `<div class="err">❌ ${err.message}</div>`;
+  }
+}
+
+document.getElementById('refreshBtn')?.addEventListener('click', load);
+load();
+setInterval(load, 90000);
   </script>
 </body>
 </html>
