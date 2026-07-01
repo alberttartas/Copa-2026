@@ -603,38 +603,7 @@
       svg.appendChild(g);
     }
 
-    function connector(rOuter, angleA, angleB, rMid, childAngle, rInner, color, glowLevel, lineWidth) {
-      const g = el("g", {
-        fill: "none",
-        stroke: color,
-        "stroke-width": lineWidth || 1.6,
-        "stroke-linecap": "round",
-        "stroke-linejoin": "round",
-        opacity: glowLevel > 0 ? 1 : 0.45,
-      });
-      if (glowLevel > 0) {
-        const idx = Math.min(glowLevel - 1, GLOW_AMOUNT.length - 1);
-        g.setAttribute("filter", `url(#glow-${idx})`);
-      }
-
-      const [x1, y1] = polar(rOuter, angleA);
-      const [mx1, my1] = polar(rMid, angleA);
-      const [x2, y2] = polar(rOuter, angleB);
-      const [mx2, my2] = polar(rMid, angleB);
-      const [cmx, cmy] = polar(rMid, childAngle);
-      const [cx2, cy2] = polar(rInner, childAngle);
-
-      const large = Math.abs(angleB - angleA) > 180 ? 1 : 0;
-      const d =
-        `M${x1},${y1} L${mx1},${my1} ` +
-        `A${rMid},${rMid} 0 ${large} 1 ${mx2},${my2} ` +
-        `M${mx2},${my2} L${x2},${y2} ` +
-        `M${cmx},${cmy} L${cx2},${cy2}`;
-      g.appendChild(el("path", { d }));
-
-      svg.appendChild(g);
-    }
-
+    
     function teamNode(team, r, angle, branchColor, pending, size, glowLevel, isChampion) {
   const [x, y] = polar(r, angle);
   const g = el("g", { 
@@ -1087,7 +1056,22 @@
         continue;
       }
       
-      const childAngle = (homeNode.angle + awayNode.angle) / 2;
+      // CALCULAR O ÂNGULO DO VENCEDOR CORRETAMENTE
+      let childAngle = (homeNode.angle + awayNode.angle) / 2;
+      
+      // CORREÇÃO: garantir que o ângulo do vencedor está no arco correto
+      let diff = awayNode.angle - homeNode.angle;
+      // Normalizar para o menor caminho
+      if (diff > 180) diff -= 360;
+      if (diff < -180) diff += 360;
+      
+      // Se a diferença for grande, ajustar o ângulo médio
+      if (Math.abs(diff) > 150) {
+        let avg = (homeNode.angle + awayNode.angle) / 2;
+        if (avg > 360) avg -= 360;
+        if (avg < 0) avg += 360;
+        childAngle = avg;
+      }
       
       // Determinar o vencedor
       let winnerTeam = null;
@@ -1122,8 +1106,18 @@
       const glowLevel = Math.min(ri, GLOW_AMOUNT.length);
       const lineWidth = Math.min(ri, LINE_WIDTH.length);
 
-      // DESENHAR CONECTOR entre os times
-      connector(r1, homeNode.angle, awayNode.angle, rMid, childAngle, r2, color, glowLevel, lineWidth);
+      // DESENHAR CONECTOR CORRETAMENTE
+      connector(
+        r1, 
+        homeNode.angle, 
+        awayNode.angle, 
+        rMid, 
+        childAngle, 
+        r2, 
+        color, 
+        glowLevel, 
+        lineWidth
+      );
 
       // Criar o time vencedor ou TBD
       const teamObj = winnerTeam || { 
@@ -1178,6 +1172,71 @@
   const ts = new Date(data.updatedAt).toLocaleString("pt-BR");
   statusEl.innerHTML = `Atualizado em ${ts} <button id="refreshBtn">Atualizar agora</button>`;
   document.getElementById("refreshBtn")?.addEventListener("click", load);
+}
+
+function connector(rOuter, angleA, angleB, rMid, childAngle, rInner, color, glowLevel, lineWidth) {
+  const g = el("g", {
+    fill: "none",
+    stroke: color,
+    "stroke-width": lineWidth || 1.6,
+    "stroke-linecap": "round",
+    "stroke-linejoin": "round",
+    opacity: glowLevel > 0 ? 1 : 0.45,
+  });
+  if (glowLevel > 0) {
+    const idx = Math.min(glowLevel - 1, GLOW_AMOUNT.length - 1);
+    g.setAttribute("filter", `url(#glow-${idx})`);
+  }
+
+  // CALCULAR OS PONTOS CORRETAMENTE
+  // Ponto 1: time da casa na fase anterior
+  const [x1, y1] = polar(rOuter, angleA);
+  
+  // Ponto 2: time visitante na fase anterior
+  const [x2, y2] = polar(rOuter, angleB);
+  
+  // Pontos médios no arco
+  const [mx1, my1] = polar(rMid, angleA);
+  const [mx2, my2] = polar(rMid, angleB);
+  
+  // Ponto do vencedor na fase atual
+  const [cx2, cy2] = polar(rInner, childAngle);
+  
+  // Ponto de conexão do vencedor com o arco
+  const [cmx, cmy] = polar(rMid, childAngle);
+
+  // VERIFICAR A MENOR DISTÂNCIA ANGULAR
+  let angleDiff = angleB - angleA;
+  // Normalizar para o menor caminho
+  if (angleDiff > 180) angleDiff -= 360;
+  if (angleDiff < -180) angleDiff += 360;
+  
+  // Se a diferença for muito pequena, os times estão muito próximos
+  const useStraightLine = Math.abs(angleDiff) < 5 || Math.abs(angleDiff) > 170;
+  
+  let d;
+  if (useStraightLine) {
+    // Se estiverem muito próximos, usar uma curva simples
+    const [midX, midY] = polar((rOuter + rInner) / 2, childAngle);
+    d = `M${x1},${y1} Q${midX},${midY} ${cx2},${cy2}`;
+  } else {
+    // Arco normal com a curvatura correta
+    const large = Math.abs(angleDiff) > 90 ? 1 : 0;
+    // Determinar a direção do arco (sweep)
+    const sweep = angleDiff > 0 ? 0 : 1;
+    
+    d = 
+      `M${x1},${y1} ` +
+      `L${mx1},${my1} ` +
+      `A${rMid},${rMid} 0 ${large} ${sweep} ${mx2},${my2} ` +
+      `L${x2},${y2} ` +
+      `M${cmx},${cmy} ` +
+      `L${cx2},${cy2}`;
+  }
+  
+  g.appendChild(el("path", { d }));
+
+  svg.appendChild(g);
 }
     async function load() {
       statusEl.textContent = "Atualizando…";
