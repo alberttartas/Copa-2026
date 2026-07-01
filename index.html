@@ -636,111 +636,120 @@
     }
 
     function teamNode(team, r, angle, branchColor, pending, size, glowLevel, isChampion) {
-      const [x, y] = polar(r, angle);
-      const g = el("g", { 
-        class: "node", 
-        "data-x": x, 
-        "data-y": y,
-        style: `--size: ${size}px`
-      });
+  const [x, y] = polar(r, angle);
+  const g = el("g", { 
+    class: "node", 
+    "data-x": x, 
+    "data-y": y,
+    style: `--size: ${size}px`
+  });
 
-      const clipId = "clip-" + Math.random().toString(36).slice(2);
-      const defs = el("defs", {});
-      const clip = el("clipPath", { id: clipId });
-      clip.appendChild(el("circle", { cx: x, cy: y, r: size / 2 }));
-      defs.appendChild(clip);
-      g.appendChild(defs);
+  const clipId = "clip-" + Math.random().toString(36).slice(2);
+  const defs = el("defs", {});
+  const clip = el("clipPath", { id: clipId });
+  clip.appendChild(el("circle", { cx: x, cy: y, r: size / 2 }));
+  defs.appendChild(clip);
+  g.appendChild(defs);
 
-      const ring = el("circle", {
-        cx: x, cy: y, r: size / 2 + 2.5,
-        fill: pending ? "#101012" : "#151517",
-        stroke: pending ? GREY : (isChampion ? "#d9a531" : branchColor),
-        "stroke-width": isChampion ? 3 : (pending ? 1.4 : 2.2),
-      });
-      if (glowLevel > 0 && !pending) {
-        const idx = Math.min(glowLevel - 1, GLOW_AMOUNT.length - 1);
-        ring.setAttribute("filter", `url(#glow-${idx})`);
-      }
-      if (isChampion) {
-        ring.setAttribute("stroke", "#d9a531");
-        ring.setAttribute("stroke-width", "3");
-        const anim = el("animate", {
-          attributeName: "r",
-          values: `${size/2 + 2.5};${size/2 + 5};${size/2 + 2.5}`,
-          dur: "2s",
-          repeatCount: "indefinite"
-        });
-        ring.appendChild(anim);
-        const anim2 = el("animate", {
-          attributeName: "stroke-opacity",
-          values: "1;0.6;1",
-          dur: "2s",
-          repeatCount: "indefinite"
-        });
-        ring.appendChild(anim2);
-      }
-      g.appendChild(ring);
+  const ring = el("circle", {
+    cx: x, cy: y, r: size / 2 + 2.5,
+    fill: pending ? "#101012" : "#151517",
+    stroke: pending ? GREY : (isChampion ? "#d9a531" : branchColor),
+    "stroke-width": isChampion ? 3 : (pending ? 1.4 : 2.2),
+  });
+  if (glowLevel > 0 && !pending) {
+    const idx = Math.min(glowLevel - 1, GLOW_AMOUNT.length - 1);
+    ring.setAttribute("filter", `url(#glow-${idx})`);
+  }
+  if (isChampion) {
+    ring.setAttribute("stroke", "#d9a531");
+    ring.setAttribute("stroke-width", "3");
+    const anim = el("animate", {
+      attributeName: "r",
+      values: `${size/2 + 2.5};${size/2 + 5};${size/2 + 2.5}`,
+      dur: "2s",
+      repeatCount: "indefinite"
+    });
+    ring.appendChild(anim);
+    const anim2 = el("animate", {
+      attributeName: "stroke-opacity",
+      values: "1;0.6;1",
+      dur: "2s",
+      repeatCount: "indefinite"
+    });
+    ring.appendChild(anim2);
+  }
+  g.appendChild(ring);
 
-      if (team && team.logo) {
-        const img = el("image", {
-          x: x - size / 2, y: y - size / 2, width: size, height: size,
-          href: team.logo, 
-          "clip-path": `url(#${clipId})`,
-          class: `node-img${pending ? " pending" : ""}${isChampion ? " champion" : ""}`,
-          preserveAspectRatio: "xMidYMid slice",
-        });
-        g.appendChild(img);
-      } else {
-        g.appendChild(el("circle", { cx: x, cy: y, r: size / 2 - 4, fill: "#222226" }));
-      }
+  // Bandeira do time
+  if (team && team.logo) {
+    const img = el("image", {
+      x: x - size / 2, y: y - size / 2, width: size, height: size,
+      href: team.logo, 
+      "clip-path": `url(#${clipId})`,
+      class: `node-img${pending ? " pending" : ""}${isChampion ? " champion" : ""}`,
+      preserveAspectRatio: "xMidYMid slice",
+    });
+    g.appendChild(img);
+  } else {
+    g.appendChild(el("circle", { cx: x, cy: y, r: size / 2 - 4, fill: "#222226" }));
+  }
 
-      if (!pending && team && team.code) {
-        const conf = getConfederation(team.code);
-        if (conf) {
-          const badgeSize = Math.max(11, Math.round(size * 0.34));
-          const angleRad = Math.atan2(y - CY, x - CX);
-          const offset = size / 2 + badgeSize / 2 + 3;
-          const bx = x + Math.cos(angleRad) * offset;
-          const by = y + Math.sin(angleRad) * offset;
-          g.appendChild(el("image", {
-            x: bx - badgeSize / 2,
-            y: by - badgeSize / 2,
-            width: badgeSize,
-            height: badgeSize,
-            href: `/assets/img/federations/${conf}.svg`,
-            class: "conf-badge",
-            preserveAspectRatio: "xMidYMid meet",
-          }));
-        }
-      }
-
-      if (team && team.name) {
-        g.addEventListener("mouseenter", (ev) => {
-          if (tooltip.classList.contains("pinned")) return;
-          showTooltip(ev, team);
-        });
-        g.addEventListener("mousemove", (ev) => {
-          if (tooltip.classList.contains("pinned")) return;
-          tooltip.style.left = (ev.clientX + 16) + "px";
-          tooltip.style.top = (ev.clientY + 16) + "px";
-        });
-        g.addEventListener("mouseleave", () => {
-          if (tooltip.classList.contains("pinned")) return;
-          tooltip.classList.remove("visible");
-        });
-        if (team.id && !pending) {
-          g.style.cursor = "pointer";
-          g.addEventListener("click", (ev) => {
-            ev.stopPropagation();
-            showTeamDetails(ev, team);
-          });
-        }
-      }
-
-      svg.appendChild(g);
-      allNodeGroups.push(g);
-      return g;
+  // Selo da confederação - CORRIGIDO para usar BRA.svg, GER.svg, etc.
+  if (!pending && team && team.code) {
+    const conf = getConfederation(team.code);
+    if (conf) {
+      const badgeSize = Math.max(11, Math.round(size * 0.34));
+      const angleRad = Math.atan2(y - CY, x - CX);
+      const offset = size / 2 + badgeSize / 2 + 3;
+      const bx = x + Math.cos(angleRad) * offset;
+      const by = y + Math.sin(angleRad) * offset;
+      
+      // CORREÇÃO: usa o código do time (ex: "BRA.svg") em vez do nome da confederação
+      const confPath = `/assets/img/federations/${team.code}.svg`;
+      
+      g.appendChild(el("image", {
+        x: bx - badgeSize / 2,
+        y: by - badgeSize / 2,
+        width: badgeSize,
+        height: badgeSize,
+        href: confPath,
+        class: "conf-badge",
+        preserveAspectRatio: "xMidYMid meet",
+        // Fallback caso a imagem não carregue
+        onerror: "this.style.display='none'"
+      }));
     }
+  }
+
+  // Eventos do mouse...
+  if (team && team.name) {
+    g.addEventListener("mouseenter", (ev) => {
+      if (tooltip.classList.contains("pinned")) return;
+      showTooltip(ev, team);
+    });
+    g.addEventListener("mousemove", (ev) => {
+      if (tooltip.classList.contains("pinned")) return;
+      tooltip.style.left = (ev.clientX + 16) + "px";
+      tooltip.style.top = (ev.clientY + 16) + "px";
+    });
+    g.addEventListener("mouseleave", () => {
+      if (tooltip.classList.contains("pinned")) return;
+      tooltip.classList.remove("visible");
+    });
+    if (team.id && !pending) {
+      g.style.cursor = "pointer";
+      g.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        showTeamDetails(ev, team);
+      });
+    }
+  }
+
+  svg.appendChild(g);
+  allNodeGroups.push(g);
+  return g;
+}
 
     function showTooltip(ev, team) {
       const match = team._matchData || {};
