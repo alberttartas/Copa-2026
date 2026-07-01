@@ -4,146 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Copa 2026 – Bracket Circular</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: #0b0b0c;
-      color: #e9e6df;
-      font-family: system-ui, -apple-system, sans-serif;
-      overflow: hidden;
-      height: 100vh;
-      margin: 0;
-    }
-
-    /* ===== LAYOUT ===== */
-    #app {
-      position: relative;
-      width: 100vw;
-      height: 100vh;
-      overflow: hidden;
-    }
-
-    /* ===== SVG LAYER ===== */
-    #bracket-layer {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      display: block;
-      background: radial-gradient(circle at center, #1a1508, #0b0b0c);
-      cursor: grab;
-    }
-    #bracket-layer:active { cursor: grabbing; }
-
-    /* ===== UI LAYER (SOBREPOSTA, SEM INTERFERIR NO SVG) ===== */
-    #ui-layer {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none; /* permite cliques passarem para o SVG */
-      z-index: 10;
-    }
-
-    /* ===== TOOLTIP (GPU-friendly) ===== */
-    #tooltip {
-      position: absolute;
-      padding: 10px 16px;
-      background: rgba(20, 20, 23, 0.95);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 10px;
-      font-size: 13px;
-      color: #e9e6df;
-      box-shadow: 0 12px 40px rgba(0,0,0,0.8);
-      pointer-events: none;
-      transform: translate3d(0, 0, 0);
-      will-change: transform, opacity;
-      transition: opacity 0.15s ease;
-      opacity: 0;
-      white-space: nowrap;
-      max-width: 280px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    #tooltip.visible {
-      opacity: 1;
-    }
-    #tooltip .score {
-      color: #d9a531;
-      font-weight: 700;
-      font-size: 16px;
-      margin-top: 2px;
-    }
-    #tooltip .detail {
-      color: #9ca3af;
-      font-size: 11px;
-      margin-top: 4px;
-    }
-    #tooltip .live {
-      color: #ff3b30;
-      font-weight: 600;
-      animation: pulse 1s infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
-    }
-
-    /* ===== STATUS ===== */
-    #status {
-      position: absolute;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.5);
-      backdrop-filter: blur(6px);
-      padding: 6px 18px;
-      border-radius: 30px;
-      font-size: 12px;
-      color: #8a8a8f;
-      z-index: 20;
-      border: 1px solid rgba(255,255,255,0.05);
-      pointer-events: auto;
-    }
-    #status button {
-      background: none;
-      border: none;
-      color: #d9a531;
-      cursor: pointer;
-      font-weight: 600;
-      margin-left: 12px;
-      font-size: 12px;
-    }
-    #status button:hover { text-decoration: underline; }
-
-    /* ===== SVG ELEMENTOS ===== */
-    .node-img {
-      filter: drop-shadow(0 1px 3px rgba(0,0,0,.6));
-    }
-    .node-img.pending {
-      opacity: 0.32;
-    }
-    .connector {
-      fill: none;
-      stroke: #4b5563;
-      stroke-width: 2;
-      stroke-linecap: round;
-    }
-    .connector.winner {
-      stroke: #d9a531;
-      stroke-width: 3;
-    }
-    .match-card {
-      cursor: pointer;
-      transition: filter 0.2s;
-    }
-    .match-card:hover {
-      filter: brightness(1.2);
-    }
-  </style>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="app">
@@ -208,12 +69,6 @@
       const x = CX + r * Math.sin(angleRad);
       const y = CY - r * Math.cos(angleRad);
       return [x, y];
-    }
-
-    function normalizeAngle(a) {
-      while (a < 0) a += 2 * Math.PI;
-      while (a >= 2 * Math.PI) a -= 2 * Math.PI;
-      return a;
     }
 
     function midAngle(a, b) {
@@ -398,9 +253,6 @@
         return;
       }
 
-      // Mapa para armazenar nós por fase (para conectar depois)
-      const nodesByLevel = [];
-
       // Renderizar folhas
       const firstNodes = leaves.map((team, i) => {
         const angleRad = (i / N) * 2 * Math.PI - Math.PI / 2;
@@ -411,7 +263,6 @@
         drawTeamNode(team, LEVEL_R[0], angleRad, BRANCH_COLORS[branchIdx], false);
         return { team, angle: angleRad, branchIdx };
       });
-      nodesByLevel.push(firstNodes);
 
       // 2. Fases seguintes
       let previousNodes = firstNodes;
@@ -477,7 +328,6 @@
         }
 
         previousNodes = currentNodes;
-        nodesByLevel.push(previousNodes);
         level += 1;
         if (currentNodes.length === 0) break;
       }
@@ -557,9 +407,6 @@
 
     // Atualização automática a cada 90s
     setInterval(load, 90000);
-
-    // Redimensionar tooltip se necessário (não precisa)
-    // O tooltip é posicionado com transform, sem layout thrash
 
     console.log('🏆 Arquitetura 2-layer iniciada com sucesso.');
   </script>
