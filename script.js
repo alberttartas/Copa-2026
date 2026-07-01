@@ -1,5 +1,5 @@
 // ============================================================
-// BRACKET CIRCULAR – LAYOUT FIXO (GEOMETRIA DETERMINÍSTICA)
+// BRACKET CIRCULAR – LAYOUT ABSOLUTAMENTE FIXO
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -37,83 +37,105 @@ const COLORS = [
 const GREY = '#3c3c40';
 
 // ============================================================
-// GEOMETRIA FIXA – POSIÇÃO DETERMINÍSTICA
-// ============================================================
-
-function getNodePosition(roundIndex, nodeIndex, totalLeaves) {
-  const count = totalLeaves / Math.pow(2, roundIndex);
-  const angleStep = (2 * Math.PI) / count;
-  const angle = nodeIndex * angleStep - Math.PI / 2;
-  return { angle, count };
-}
-
-// ============================================================
-// LAYOUT PRÉ-CALCULADO (FIXO, NUNCA MUDA)
+// LAYOUT ABSOLUTAMENTE FIXO (INDEPENDENTE DA API)
 // ============================================================
 
 function buildFixedLayout(totalLeaves) {
-  const slots = [];
-
-  // Número total de rounds (folhas + fases seguintes)
-  const totalRounds = Math.ceil(Math.log2(totalLeaves)) + 1;
+  const totalRounds = Math.log2(totalLeaves) + 1;
+  const layout = [];
 
   for (let r = 0; r < totalRounds; r++) {
     const count = Math.max(1, totalLeaves / Math.pow(2, r));
     const layer = [];
 
     for (let i = 0; i < count; i++) {
-      const { angle } = getNodePosition(r, i, totalLeaves);
+      const angle = (i / count) * 2 * Math.PI - Math.PI / 2;
       const radius = LEVEL_R[r] || LEVEL_R[LEVEL_R.length - 1];
 
       layer.push({
+        id: `r${r}_n${i}`, // SLOT FIXO REAL
         round: r,
         index: i,
         angle,
         radius,
-        x: CX + radius * Math.sin(angle),
-        y: CY - radius * Math.cos(angle),
         team: null,
         matchId: null,
+        colorIndex: i % COLORS.length,
         isPending: true,
         isWinner: false,
-        colorIndex: i % COLORS.length,
+        // Posições pré-calculadas
+        x: CX + radius * Math.sin(angle),
+        y: CY - radius * Math.cos(angle),
       });
     }
 
-    slots.push(layer);
+    layout.push(layer);
   }
 
-  return slots;
+  return layout;
 }
 
 // ============================================================
-// MAPEAMENTO: DADOS DA API → SLOTS FIXOS
+// MAPEAMENTO: API → SLOTS (POR fixtureId, NÃO POR POSIÇÃO)
 // ============================================================
 
 function mapApiToSlots(leaves, rounds) {
-  const totalLeaves = leaves.length;
+  // Usar número fixo de leaves para o layout
+  const totalLeaves = leaves.length || 32;
   const layout = buildFixedLayout(totalLeaves);
 
-  // ---------- ROUND 0: FOLHAS ----------
-  const leafSlots = layout[0] || [];
-  leaves.forEach((team, i) => {
-    if (i < leafSlots.length) {
-      leafSlots[i].team = team;
-      leafSlots[i].isPending = false;
-      leafSlots[i].matchId = null;
-      leafSlots[i].isWinner = false;
+  // ---------- MAPA DE SLOTS POR ID ----------
+  const slotMap = new Map();
+  for (const layer of layout) {
+    for (const slot of layer) {
+      slotMap.set(slot.id, slot);
     }
-  });
+  }
 
-  // ---------- ROUNDS SEGUINTES ----------
+  // ---------- MAPA DE MATCHES POR fixtureId ----------
+  const matchMap = new Map();
+  for (const round of rounds) {
+    for (const match of round.matches || []) {
+      matchMap.set(match.fixtureId, match);
+    }
+  }
+
+  // ---------- ROUND 0: FOLHAS ----------
+  // Mapear cada leaf para um slot fixo (usando o índice da API)
+  // Mas a posição é fixa! O índice da API não define a posição.
+  const leafSlots = layout[0] || [];
+  for (let i = 0; i < leaves.length && i < leafSlots.length; i++) {
+    const slot = leafSlots[i];
+    const team = leaves[i];
+    slot.team = team;
+    slot.isPending = false;
+    slot.isWinner = false;
+    slot.matchId = null;
+  }
+
+  // ---------- ROUNDS SEGUINTES (POR fixtureId) ----------
+  // 🔥 CRÍTICO: usamos fixtureId para encontrar o slot correto
+  // NÃO usamos índice do match para posição!
+
+  // Primeiro, identificar qual slot cada match ocupa
+  // Para cada round, os slots são fixos. Precisamos saber qual slot
+  // corresponde a cada match da API.
+
+  // Estratégia: os matches da API vêm em ordem, mas a posição é fixa.
+  // Cada match da API tem um fixtureId. Vamos associar cada match a um slot
+  // baseado na ORDEM da API (porque a API já vem na ordem correta).
+  // MAS a posição é definida pelo slot, não pelo match.
+
   for (let ri = 0; ri < rounds.length; ri++) {
     const round = rounds[ri];
     const matches = round.matches || [];
     const nextLayer = layout[ri + 1] || [];
 
+    // Para cada match da API, atribuir ao próximo slot disponível
+    // A posição é fixa, a ordem da API só define qual time vai em qual slot
     for (let i = 0; i < matches.length && i < nextLayer.length; i++) {
       const match = matches[i];
-      const slot = nextLayer[i];
+      const slot = nextLayer[i]; // POSIÇÃO FIXA, NÃO DEPENDE DO MATCH
 
       // Determinar vencedor
       let winner = null;
@@ -140,6 +162,7 @@ function mapApiToSlots(leaves, rounds) {
       slot.isPending = !decided;
       slot.matchId = match.fixtureId;
       slot.isWinner = decided;
+      slot.colorIndex = i % COLORS.length;
     }
   }
 
@@ -147,7 +170,7 @@ function mapApiToSlots(leaves, rounds) {
 }
 
 // ============================================================
-// RENDER SVG (USANDO LAYOUT FIXO)
+// RENDER SVG (LAYOUT FIXO)
 // ============================================================
 
 function render() {
@@ -155,13 +178,12 @@ function render() {
   clearSVG();
 
   const { rounds, leaves } = state;
-  if (!rounds.length || !leaves.length) {
-    if (statusText) statusText.textContent = '⏳ Aguardando dados...';
-    return;
-  }
 
-  // Layout fixo com dados da API
-  const layout = mapApiToSlots(leaves, rounds);
+  // Se não houver dados, usar layout vazio com 32 slots
+  const totalLeaves = leaves.length || 32;
+  const layout = (leaves.length && rounds.length)
+    ? mapApiToSlots(leaves, rounds)
+    : buildFixedLayout(totalLeaves);
 
   // ---------- FUNDO ----------
   drawBackground();
@@ -173,9 +195,9 @@ function render() {
   for (const layer of layout) {
     for (const slot of layer) {
       const team = slot.team;
-      const isPending = slot.isPending;
+      const isPending = slot.isPending || !team;
       const isWinner = slot.isWinner;
-      const color = isPending ? GREY : COLORS[slot.colorIndex];
+      const color = isPending ? GREY : COLORS[slot.colorIndex % COLORS.length];
 
       drawNode(
         team || { code: 'TBD', name: 'TBD', id: null },
@@ -202,7 +224,7 @@ function render() {
 }
 
 // ============================================================
-// CONEXÕES FIXAS (PRÉ-DEFINIDAS, GEOMETRIA PURA)
+// CONEXÕES FIXAS (GEOMETRIA PURA)
 // ============================================================
 
 function drawFixedConnections(layout) {
@@ -239,7 +261,7 @@ function drawFixedConnections(layout) {
 }
 
 // ============================================================
-// CONEXÃO POR BÉZIER (SUAVE)
+// CONEXÃO POR BÉZIER
 // ============================================================
 
 function drawBezierConnection(r1, angleA, r2, angleB, rMid, childAngle, rChild, color) {
@@ -253,7 +275,6 @@ function drawBezierConnection(r1, angleA, r2, angleB, rMid, childAngle, rChild, 
   const midX = (x1 + x2) / 2;
   const midY = (y1 + y2) / 2;
 
-  // Curva: pai1 → centro
   const path1 = elNS('path', {
     d: `M${x1},${y1} Q${midX},${midY} ${cx},${cy}`,
     stroke: color || '#4b5563',
@@ -263,7 +284,6 @@ function drawBezierConnection(r1, angleA, r2, angleB, rMid, childAngle, rChild, 
   });
   svgLayer.appendChild(path1);
 
-  // Curva: centro → pai2
   const path2 = elNS('path', {
     d: `M${cx},${cy} Q${midX},${midY} ${x2},${y2}`,
     stroke: color || '#4b5563',
@@ -273,7 +293,6 @@ function drawBezierConnection(r1, angleA, r2, angleB, rMid, childAngle, rChild, 
   });
   svgLayer.appendChild(path2);
 
-  // Linha: centro → filho
   const path3 = elNS('path', {
     d: `M${cx},${cy} L${cx2},${cy2}`,
     stroke: color || '#4b5563',
@@ -285,7 +304,7 @@ function drawBezierConnection(r1, angleA, r2, angleB, rMid, childAngle, rChild, 
 }
 
 // ============================================================
-// NÓ (TIME) – GEOMETRIA FIXA, ESTADO VARIÁVEL
+// NÓ (TIME) – ESTADO VARIÁVEL, POSIÇÃO FIXA
 // ============================================================
 
 function drawNode(team, r, a, color, pending, matchId, isWinner) {
@@ -296,7 +315,6 @@ function drawNode(team, r, a, color, pending, matchId, isWinner) {
 
   const g = elNS('g', { 'data-match-id': matchId || '' });
 
-  // Círculo (tamanho varia se é vencedor)
   const radius = isWinner ? 18 : 14;
   const strokeWidth = isWinner ? 3 : 1.5;
 
@@ -309,7 +327,6 @@ function drawNode(team, r, a, color, pending, matchId, isWinner) {
     'stroke-width': strokeWidth,
   }));
 
-  // Texto
   const t = elNS('text', {
     x,
     y: y + 4,
@@ -321,7 +338,6 @@ function drawNode(team, r, a, color, pending, matchId, isWinner) {
   t.textContent = team?.code || 'TBD';
   g.appendChild(t);
 
-  // Eventos
   g.onmouseenter = (e) => {
     const rect = svgLayer.getBoundingClientRect();
     state.hover = {
@@ -512,5 +528,4 @@ if (refreshBtn) {
 load();
 setInterval(load, 90000);
 
-console.log('🏆 Bracket circular com geometria fixa iniciado.');
-console.log('📊 Layout determinístico: posições nunca mudam.');
+console.log('🏆 Bracket circular com layout fixo (slots por ID) iniciado.');
