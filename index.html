@@ -448,674 +448,345 @@
 
    <script type="module">
     // ============================================================
-//  BRACKET CIRCULAR – RENDERIZAÇÃO POR FASE (SEM LOOKUP)
-//  ✅ backend já entrega rounds prontos
-//  ✅ front apenas desenha, sem reconstruir árvore
-//  ✅ layout radial (círculo) com conectores suaves
-//  ✅ tooltip, destaque de vencedor, AO VIVO
+//  BRACKET CIRCULAR – PROPAGAÇÃO POR ID (PROFISSIONAL)
+//  ✅ usa match.id para progressão
+//  ✅ gera nextMatchId + slot (se API não tiver)
+//  ✅ distribuição angular uniforme (radianos)
+//  ✅ sem fallback de ângulo
+//  ✅ defs único
 // ============================================================
 
-// ---------- CONSTANTES ----------
-const NS = 'http://www.w3.org/2000/svg';
+const NS = "http://www.w3.org/2000/svg";
 const CX = 500, CY = 500;
-const LEVEL_R = [460, 400, 338, 276, 214, 130];
-const NODE_SIZE = [28, 34, 42, 52, 66, 80];
-const BRANCH_COLORS = [
-  '#e6484f', '#3ddc84', '#f0c23d', '#4ea1f7',
-  '#b768e0', '#ff9f53', '#2ec4b6', '#ff6f91'
-];
-const GREY = '#3c3c40';
-const GLOW_AMOUNT = [4, 8, 14, 20, 26];
-const STATUS_LABELS = {
-  LIVE: 'AO VIVO',
-  FINISHED: 'ENCERRADO',
-  SCHEDULED: 'EM BREVE',
-  TIMED: 'EM BREVE',
-  IN_PLAY: 'AO VIVO',
-  PAUSED: 'INTERVALO',
-};
+const POLL_MS = 90_000;
 
-// ---------- DOM REFS ----------
-const svg = document.getElementById('stage');
-const statusEl = document.getElementById('status');
-const tooltip = document.getElementById('tooltip');
-const livePanel = document.getElementById('livePanel');
-let currentData = null;
+// raios de fora para dentro
+const LEVEL_R = [460, 400, 338, 276, 214, 130];
+const BRANCH_COLORS = [
+  "#e6484f", "#3ddc84", "#f0c23d", "#4ea1f7",
+  "#b768e0", "#ff9f53", "#2ec4b6", "#ff6f91",
+];
+const GREY = "#3c3c40";
+const NODE_SIZE = 30;
+
+const svg = document.getElementById("stage");
+const statusEl = document.getElementById("status");
+const tip = document.getElementById("tip");
 
 // ---------- FUNÇÕES AUXILIARES ----------
 function el(tag, attrs) {
   const n = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(attrs || {})) n.setAttribute(k, v);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
   return n;
 }
 
-function polar(r, angleDeg) {
-  const a = ((angleDeg - 90) * Math.PI) / 180;
-  return [CX + r * Math.cos(a), CY + r * Math.sin(a)];
-}
-
-function normalizeAngle(a) {
-  a = a % 360;
-  if (a < 0) a += 360;
-  return a;
-}
-
-function angleDiff(a, b) {
-  let d = normalizeAngle(b - a);
-  if (d > 180) d -= 360;
-  if (d < -180) d += 360;
-  return d;
-}
-
-function midAngle(a, b) {
-  return normalizeAngle(a + angleDiff(a, b) / 2);
+function polar(r, angleRad) {
+  // angleRad em radianos, 0 = topo (12h)
+  const x = CX + r * Math.sin(angleRad);
+  const y = CY - r * Math.cos(angleRad);
+  return [x, y];
 }
 
 function clear(node) {
-  while (node.firstChild) node.removeChild(node.firstChild);
+  while (node.lastChild) node.removeChild(node.lastChild);
+}
+
+// ---------- CRIAÇÃO DE <defs> ÚNICO ----------
+function getDefs() {
+  let defs = document.getElementById("defs");
+  if (!defs) {
+    defs = el("defs", { id: "defs" });
+    svg.prepend(defs);
+  }
+  return defs;
 }
 
 // ---------- DESENHO DE FUNDO ----------
 function drawBackground() {
-  const defs = el('defs');
-  const grad = el('radialGradient', { id: 'bgGlow', cx: '50%', cy: '50%', r: '50%' });
-  grad.appendChild(el('stop', { offset: '0%', 'stop-color': '#3a2c0c', 'stop-opacity': '0.6' }));
-  grad.appendChild(el('stop', { offset: '30%', 'stop-color': '#1c1508', 'stop-opacity': '0.4' }));
-  grad.appendChild(el('stop', { offset: '100%', 'stop-color': '#0b0b0c', 'stop-opacity': '1' }));
-  defs.appendChild(grad);
-
-  for (let i = 0; i < GLOW_AMOUNT.length; i++) {
-    const filter = el('filter', { id: `glow-${i}`, x: '-60%', y: '-60%', width: '220%', height: '220%' });
-    filter.appendChild(el('feGaussianBlur', { stdDeviation: GLOW_AMOUNT[i], result: 'blur' }));
-    const merge = el('feMerge');
-    merge.appendChild(el('feMergeNode', { in: 'blur' }));
-    merge.appendChild(el('feMergeNode', { in: 'SourceGraphic' }));
-    filter.appendChild(merge);
-    defs.appendChild(filter);
+  const defs = getDefs();
+  if (!document.getElementById("bgGlow")) {
+    const grad = el("radialGradient", { id: "bgGlow", cx: "50%", cy: "50%", r: "55%" });
+    grad.appendChild(el("stop", { offset: "0%", "stop-color": "#3a2c0c" }));
+    grad.appendChild(el("stop", { offset: "55%", "stop-color": "#15120a" }));
+    grad.appendChild(el("stop", { offset: "100%", "stop-color": "#0b0b0c" }));
+    defs.appendChild(grad);
   }
+  svg.appendChild(el("rect", { x: 0, y: 0, width: 1000, height: 1000, fill: "url(#bgGlow)" }));
 
-  svg.appendChild(defs);
-  svg.appendChild(el('rect', { x: 0, y: 0, width: 1000, height: 1000, fill: 'url(#bgGlow)' }));
-
-  LEVEL_R.forEach(r => {
-    svg.appendChild(el('circle', { cx: CX, cy: CY, r, fill: 'none', stroke: '#1c1c1f', 'stroke-width': 0.5 }));
+  LEVEL_R.forEach((r) => {
+    svg.appendChild(
+      el("circle", { cx: CX, cy: CY, r, fill: "none", stroke: "#222226", "stroke-width": 1 })
+    );
   });
 }
 
-// ---------- DESENHO DE CONECTOR (ARCO + LINHA) ----------
-function drawConnector(rOuter, angleA, angleB, rMid, childAngle, rInner, color, glowLevel, lineWidth) {
-  const g = el('g', {
-    fill: 'none',
-    stroke: color,
-    'stroke-width': lineWidth || 1.6,
-    'stroke-linecap': 'round',
-    'stroke-linejoin': 'round',
-    opacity: glowLevel > 0 ? 1 : 0.45
-  });
-
-  if (glowLevel > 0) {
-    const idx = Math.min(glowLevel - 1, GLOW_AMOUNT.length - 1);
-    g.setAttribute('filter', `url(#glow-${idx})`);
-  }
-
-  const [x1, y1] = polar(rOuter, angleA);
-  const [x2, y2] = polar(rOuter, angleB);
-  const [mx1, my1] = polar(rMid, angleA);
-  const [mx2, my2] = polar(rMid, angleB);
-  const [cx2, cy2] = polar(rInner, childAngle);
-  const [cmx, cmy] = polar(rMid, childAngle);
-
-  const diff = angleDiff(angleA, angleB);
-  const large = Math.abs(diff) > 180 ? 1 : 0;
-  const sweep = diff >= 0 ? 1 : 0;
-
-  const d =
-    `M${x1},${y1} L${mx1},${my1} ` +
-    `A${rMid},${rMid} 0 ${large} ${sweep} ${mx2},${my2} ` +
-    `L${x2},${y2} M${cmx},${cmy} L${cx2},${cy2}`;
-
-  g.appendChild(el('path', { d }));
+// ---------- TAÇA ----------
+function drawTrophy() {
+  const g = el("g", {});
+  g.appendChild(el("circle", { cx: CX, cy: CY, r: 56, fill: "#0b0b0c", stroke: "#3a2c0c", "stroke-width": 2 }));
+  const t = el("text", { x: CX, y: CY + 8, "text-anchor": "middle", "font-size": 40, fill: "#d9a531" });
+  t.textContent = "🏆";
+  g.appendChild(t);
   svg.appendChild(g);
 }
 
-// ---------- DESENHO DE UM NÓ (TIME) ----------
-function drawTeamNode(team, r, angle, branchColor, pending, size, glowLevel, isChampion) {
-  const [x, y] = polar(r, angle);
-  const g = el('g', { class: 'node', 'data-x': x, 'data-y': y });
+// ---------- CONECTOR ----------
+function drawConnector(r1, angleA, r2, angleB, rMid, childAngle, rChild, color) {
+  const g = el("g", { fill: "none", stroke: color, "stroke-width": 2, "stroke-linecap": "round" });
 
-  const clipId = 'clip-' + Math.random().toString(36).slice(2);
-  const defs = el('defs');
-  const clip = el('clipPath', { id: clipId });
-  clip.appendChild(el('circle', { cx: x, cy: y, r: size / 2 }));
-  defs.appendChild(clip);
-  g.appendChild(defs);
+  const [x1, y1] = polar(r1, angleA);
+  const [mx1, my1] = polar(rMid, angleA);
+  const [x2, y2] = polar(r2, angleB);
+  const [mx2, my2] = polar(rMid, angleB);
+  const [cmx, cmy] = polar(rMid, childAngle);
+  const [cx2, cy2] = polar(rChild, childAngle);
 
-  const ring = el('circle', {
-    cx: x, cy: y,
-    r: size / 2 + 2.5,
-    fill: pending ? '#101012' : '#151517',
-    stroke: pending ? GREY : (isChampion ? '#d9a531' : branchColor),
-    'stroke-width': isChampion ? 3 : (pending ? 1.4 : 2.2)
-  });
+  g.appendChild(el("path", { d: `M${x1},${y1} L${mx1},${my1}` }));
+  g.appendChild(el("path", { d: `M${x2},${y2} L${mx2},${my2}` }));
+  const diff = angleB - angleA;
+  const large = Math.abs(diff) > Math.PI ? 1 : 0;
+  g.appendChild(el("path", { d: `M${mx1},${my1} A${rMid},${rMid} 0 ${large} 1 ${mx2},${my2}` }));
+  g.appendChild(el("path", { d: `M${cmx},${cmy} L${cx2},${cy2}` }));
 
-  if (glowLevel > 0 && !pending) {
-    const idx = Math.min(glowLevel - 1, GLOW_AMOUNT.length - 1);
-    ring.setAttribute('filter', `url(#glow-${idx})`);
+  svg.appendChild(g);
+}
+
+// ---------- NÓ DE TIME ----------
+function drawTeamNode(team, r, angleRad, branchColor, pending) {
+  const [x, y] = polar(r, angleRad);
+  const size = NODE_SIZE;
+  const g = el("g", { class: "node", "data-x": x, "data-y": y });
+
+  const defs = getDefs();
+  const clipId = `clip-${team?.id || Math.random().toString(36).slice(2)}`;
+  let clip = document.getElementById(clipId);
+  if (!clip) {
+    clip = el("clipPath", { id: clipId });
+    clip.appendChild(el("circle", { cx: x, cy: y, r: size / 2 }));
+    defs.appendChild(clip);
   }
 
-  if (isChampion) {
-    ring.setAttribute('stroke', '#d9a531');
-    ring.setAttribute('stroke-width', '3');
-    const anim = el('animate', {
-      attributeName: 'r',
-      values: `${size/2+2.5};${size/2+5};${size/2+2.5}`,
-      dur: '2s',
-      repeatCount: 'indefinite'
-    });
-    ring.appendChild(anim);
-  }
-  g.appendChild(ring);
+  g.appendChild(
+    el("circle", { cx: x, cy: y, r: size / 2 + 2, fill: "#101012", stroke: pending ? GREY : branchColor, "stroke-width": 2 })
+  );
 
   if (team && team.logo) {
-    const img = el('image', {
-      x: x - size/2, y: y - size/2,
-      width: size, height: size,
+    const img = el("image", {
+      x: x - size / 2, y: y - size / 2, width: size, height: size,
       href: team.logo,
-      'clip-path': `url(#${clipId})`,
-      class: `node-img${pending ? ' pending' : ''}${isChampion ? ' champion' : ''}`,
-      preserveAspectRatio: 'xMidYMid slice'
+      "clip-path": `url(#${clipId})`,
+      class: "node-img" + (pending ? " pending" : ""),
+      preserveAspectRatio: "xMidYMid slice",
     });
     g.appendChild(img);
   } else {
-    g.appendChild(el('circle', { cx: x, cy: y, r: size/2 - 4, fill: '#222226' }));
+    g.appendChild(el("circle", { cx: x, cy: y, r: size / 2 - 4, fill: "#222226" }));
   }
 
-  // (Confederação – mantido do original, pode ser adaptado)
-
-  // Eventos (tooltip)
   if (team && team.name) {
-    g.addEventListener('mouseenter', (ev) => {
-      if (tooltip.classList.contains('pinned')) return;
-      showTooltip(ev, team);
+    g.addEventListener("mousemove", (ev) => {
+      tip.textContent = team.name;
+      tip.style.left = ev.clientX + "px";
+      tip.style.top = ev.clientY + "px";
+      tip.style.opacity = 1;
     });
-    g.addEventListener('mousemove', (ev) => {
-      if (tooltip.classList.contains('pinned')) return;
-      tooltip.style.left = (ev.clientX + 16) + 'px';
-      tooltip.style.top = (ev.clientY + 16) + 'px';
-    });
-    g.addEventListener('mouseleave', () => {
-      if (tooltip.classList.contains('pinned')) return;
-      tooltip.classList.remove('visible');
-    });
-    if (team.id && !pending) {
-      g.style.cursor = 'pointer';
-      g.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        showTeamDetails(ev, team);
-      });
-    }
+    g.addEventListener("mouseleave", () => (tip.style.opacity = 0));
   }
 
   svg.appendChild(g);
-  return g;
 }
 
-// ---------- TOOLTIP ----------
-function showTooltip(ev, team) {
-  const match = team._matchData || {};
-  const isUpcoming = match.isUpcoming || match.status === 'SCHEDULED' || match.status === 'TIMED';
-  const isLive = match.isLive || match.status === 'IN_PLAY' || match.status === 'LIVE';
-
-  let html = '';
-  if (isUpcoming) {
-    html = `
-      <div class="tt-upcoming">
-        <span class="tt-badge">⏰ ${match.statusLabel || 'EM BREVE'}</span>
-        <div class="tt-teams">${match.homeName || '—'} <strong>vs</strong> ${match.awayName || '—'}</div>
-        <div class="tt-datetime">
-          <span>📅 ${match.date || '--/--'}</span>
-          <span>🕘 ${match.time || '--:--'}</span>
-        </div>
-        <div class="tt-stage">${match.stage || 'Fase eliminatória'}</div>
-      </div>
-    `;
-  } else if (isLive) {
-    html = `
-      <div class="tt-header">
-        <span class="tt-live-indicator"></span>
-        <span style="color:#ff3b30;font-weight:700;font-size:11px;">AO VIVO</span>
-      </div>
-      <div class="tt-header">
-        <img src="${team.logo || ''}" alt="${team.name}">
-        <span>${team.name}</span>
-        <span class="tt-vs">vs</span>
-        <img src="${match.opponent?.logo || ''}" alt="${match.opponent?.name || ''}">
-        <span>${match.opponent?.name || '—'}</span>
-      </div>
-      <div class="tt-score">${match.score || '0 × 0'}</div>
-      <div class="tt-details">
-        <span>🏆 ${match.stage || 'Fase'}</span>
-        <span>📅 ${match.date || '--/--'}</span>
-        <span>🕘 ${match.time || '--:--'}</span>
-      </div>
-    `;
-  } else {
-    html = `
-      <div class="tt-header">
-        <img src="${team.logo || ''}" alt="${team.name}">
-        <span>${team.name}</span>
-        <span class="tt-vs">vs</span>
-        <img src="${match.opponent?.logo || ''}" alt="${match.opponent?.name || ''}">
-        <span>${match.opponent?.name || '—'}</span>
-      </div>
-      <div class="tt-score">${match.score || '—'}</div>
-      <div class="tt-details">
-        <span>🏆 ${match.stage || 'Fase'}</span>
-        <span>📅 ${match.date || '--/--'}</span>
-        <span style="color:#34c759;">✅ ENCERRADO</span>
-      </div>
-    `;
-  }
-  tooltip.innerHTML = html;
-  tooltip.classList.add('visible');
-}
-
-function showTeamDetails(ev, team) {
-  // (mesmo do original, com fallback)
-  tooltip.style.left = (ev.clientX + 16) + 'px';
-  tooltip.style.top = (ev.clientY + 16) + 'px';
-  tooltip.innerHTML = `
-    <div class="tt-header">
-      <img src="${team.logo || ''}" alt="${team.name}">
-      <span>${team.name}</span>
-      <span class="tt-close" id="ttClose">✕</span>
-    </div>
-    <div class="tt-loading">Carregando…</div>
-  `;
-  tooltip.classList.add('visible', 'pinned');
-  document.getElementById('ttClose')?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    tooltip.classList.remove('visible', 'pinned');
+// ---------- PROPAGAÇÃO DE VENCEDORES (POR ID) ----------
+function propagateWinners(rounds) {
+  // 1. Construir mapa de matches por ID
+  const matchMap = new Map();
+  rounds.forEach(round => {
+    round.matches.forEach(match => {
+      matchMap.set(match.fixtureId || match.id, match);
+    });
   });
 
-  fetch(`/api/team-info?teamId=${team.id}`)
-    .then(r => r.json())
-    .then(data => {
-      const lm = data.lastMatch;
-      const ts = data.topScorer;
-      const lastMatchHtml = lm
-        ? `${lm.homeTeam} <strong>${lm.homeScore ?? '?'} × ${lm.awayScore ?? '?'}</strong> ${lm.awayTeam}`
-        : 'Sem jogos encerrados ainda.';
-      const scorerHtml = ts
-        ? `<div class="tt-scorer-row"><img class="tt-scorer-photo" src="/assets/img/art/${encodeURIComponent(ts.name)}.png" alt="${ts.name}" onerror="this.style.display='none'"><span>${ts.name} — ${ts.goals} gol${ts.goals === 1 ? '' : 's'}</span></div>`
-        : 'Sem dados disponíveis.';
-      tooltip.innerHTML = `
-        <div class="tt-header">
-          <img src="${team.logo || ''}" alt="${team.name}">
-          <span>${team.name}</span>
-          <span class="tt-close" id="ttClose">✕</span>
-        </div>
-        <div class="tt-info-row"><strong>Último jogo:</strong><br>${lastMatchHtml}</div>
-        <div class="tt-info-row"><strong>Artilheiro da seleção:</strong>${scorerHtml}</div>
-      `;
-      document.getElementById('ttClose')?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        tooltip.classList.remove('visible', 'pinned');
-      });
-    })
-    .catch(() => {
-      tooltip.innerHTML = `
-        <div class="tt-header"><span>${team.name}</span><span class="tt-close" id="ttClose">✕</span></div>
-        <div class="tt-details">Não foi possível carregar os dados agora.</div>
-      `;
-      document.getElementById('ttClose')?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        tooltip.classList.remove('visible', 'pinned');
-      });
+  // 2. Gerar nextMatchId + nextSlot se não existirem
+  for (let r = 0; r < rounds.length - 1; r++) {
+    const curr = rounds[r];
+    const next = rounds[r + 1];
+    // Assumindo que a ordem está correta (cada match da fase atual se conecta a um da próxima)
+    curr.matches.forEach((match, idx) => {
+      const nextIndex = Math.floor(idx / 2);
+      if (nextIndex < next.matches.length) {
+        const nextMatch = next.matches[nextIndex];
+        match.nextMatchId = nextMatch.fixtureId || nextMatch.id;
+        match.nextSlot = (idx % 2 === 0) ? "home" : "away";
+      }
     });
-}
-
-document.addEventListener('click', () => {
-  if (tooltip.classList.contains('pinned')) {
-    tooltip.classList.remove('visible', 'pinned');
-  }
-});
-
-// ---------- LIVE PANEL ----------
-function updateLivePanel(data) {
-  // (igual ao original, pode ser mantido)
-  const matches = [];
-  if (data.rounds) {
-    for (const round of data.rounds) {
-      for (const m of round.matches) {
-        matches.push(m);
-      }
-    }
   }
 
-  const now = new Date();
-  let liveMatch = null;
-  let nextMatch = null;
-  let earliestFuture = null;
-
-  for (const m of matches) {
-    const matchDate = new Date(m.date);
-    const status = m.status || 'SCHEDULED';
-    if (status === 'IN_PLAY' || status === 'LIVE' || status === 'PAUSED') {
-      if (!liveMatch) liveMatch = m;
-    } else if (status === 'FINISHED') {
-      continue;
-    } else {
-      if (matchDate > now) {
-        if (!earliestFuture || matchDate < earliestFuture.date) {
-          earliestFuture = { match: m, date: matchDate };
+  // 3. Propagar vencedores
+  rounds.forEach(round => {
+    round.matches.forEach(match => {
+      // Determinar vencedor
+      let winner = null;
+      if (match.winnerId != null) {
+        winner = (match.home?.id === match.winnerId) ? match.home : match.away;
+      } else if (match.status === "FINISHED" && match.score) {
+        const h = match.score?.home ?? 0;
+        const a = match.score?.away ?? 0;
+        if (h > a) winner = match.home;
+        else if (a > h) winner = match.away;
+        else if (match.score?.penalties) {
+          const ph = match.score.penalties?.home ?? 0;
+          const pa = match.score.penalties?.away ?? 0;
+          if (ph > pa) winner = match.home;
+          else if (pa > ph) winner = match.away;
         }
       }
-    }
-  }
 
-  if (!liveMatch && earliestFuture) {
-    nextMatch = earliestFuture.match;
-  } else if (liveMatch) {
-    for (const m of matches) {
-      const matchDate = new Date(m.date);
-      if (matchDate > new Date(liveMatch.date)) {
-        if (!nextMatch || matchDate < new Date(nextMatch.date)) {
-          nextMatch = m;
-        }
+      if (!winner || !match.nextMatchId) return;
+
+      const nextMatch = matchMap.get(match.nextMatchId);
+      if (!nextMatch) return;
+
+      if (match.nextSlot === "home") {
+        nextMatch.home = winner;
+      } else {
+        nextMatch.away = winner;
       }
-    }
-  }
-
-  livePanel.classList.toggle('no-live', !liveMatch);
-
-  if (liveMatch) {
-    const home = liveMatch.home;
-    const away = liveMatch.away;
-    const score = liveMatch.score;
-    const homeScore = score?.home ?? '—';
-    const awayScore = score?.away ?? '—';
-    const status = liveMatch.status || 'SCHEDULED';
-
-    document.getElementById('liveHome').textContent = home.name || '—';
-    document.getElementById('liveAway').textContent = away.name || '—';
-    document.getElementById('liveScore').textContent = `${homeScore} × ${awayScore}`;
-    document.getElementById('liveTime').textContent = `• ${new Date(liveMatch.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`;
-    document.getElementById('liveStatus').textContent = STATUS_LABELS[status] || status;
-    document.getElementById('liveStatus').className = `status-badge status-${status === 'FINISHED' ? 'finished' : (status === 'IN_PLAY' || status === 'LIVE' ? 'live' : 'upcoming')}`;
-
-    const homeImg = document.querySelector('#liveTeams img:first-child');
-    const awayImg = document.querySelector('#liveTeams img:last-child');
-    if (homeImg) homeImg.src = home.logo || '';
-    if (awayImg) awayImg.src = away.logo || '';
-    document.querySelector('.live-badge').textContent = status === 'FINISHED' ? '✓ ENCERRADO' : '● AO VIVO';
-  }
-
-  if (nextMatch) {
-    const home = nextMatch.home;
-    const away = nextMatch.away;
-    const date = new Date(nextMatch.date);
-    document.querySelector('.next-match').style.opacity = '1';
-    document.getElementById('nextHome').textContent = home.name || '—';
-    document.getElementById('nextAway').textContent = away.name || '—';
-    document.getElementById('nextDateTime').textContent =
-      `📅 ${date.toLocaleDateString('pt-BR')} • 🕘 ${date.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`;
-    const homeImg = document.querySelector('#nextTeams img:first-child');
-    const awayImg = document.querySelector('#nextTeams img:last-child');
-    if (homeImg) homeImg.src = home.logo || '';
-    if (awayImg) awayImg.src = away.logo || '';
-  } else {
-    document.querySelector('.next-match').style.opacity = '0.5';
-    document.getElementById('nextHome').textContent = '—';
-    document.getElementById('nextAway').textContent = '—';
-    document.getElementById('nextDateTime').textContent = '📅 --/-- • 🕘 --:--';
-  }
+    });
+  });
 }
 
-// ---------- RENDERIZAÇÃO PRINCIPAL (CIRCULAR) ----------
+// ---------- RENDER PRINCIPAL ----------
 function render(data) {
+  const defs = document.getElementById("defs");
   clear(svg);
+  if (defs) svg.appendChild(defs);
+
   drawBackground();
 
-  const rounds = data.rounds || [];
-  const validRounds = rounds.filter(r => r.matches && r.matches.length > 0);
+  // --- 1. PROPAGAR VENCEDORES (ANTES DE RENDERIZAR) ---
+  propagateWinners(data.rounds);
 
-  if (validRounds.length === 0) {
-    statusEl.innerHTML = '⚠️ Nenhuma fase encontrada.';
+  // --- 2. PEGAR FOLHAS (primeira fase) ---
+  const leaves = data.leaves || [];
+  const N = leaves.length;
+  if (N === 0) {
+    statusEl.innerHTML = "Nenhum time encontrado para a primeira fase.";
     return;
   }
 
-  console.log(`📊 Renderizando ${validRounds.length} fases (circular)`);
-
-  // ---------- 1. DESENHAR NÓS DA PRIMEIRA FASE ----------
-  const firstRound = validRounds[0];
-  const totalMatches = firstRound.matches.length;
-  const firstRadius = LEVEL_R[0];
-  const firstSize = NODE_SIZE[0];
-
-  // Mapear cada match para um ângulo
-  firstRound.matches.forEach((match, idx) => {
-    const step = 360 / totalMatches;
-    const baseAngle = idx * step;
-    const branchIdx = Math.floor(idx / (totalMatches / 8)) % 8;
-
-    // Time da casa
-    const homeAngle = normalizeAngle(baseAngle - step * 0.2);
-    let homeTeam = match.home || { name: 'TBD', logo: null, id: null, code: null };
-    homeTeam._matchData = {
-      opponent: match.away,
-      homeName: homeTeam.name,
-      awayName: match.away?.name || '—',
-      score: match.score ? `${match.score.home ?? '?'} × ${match.score.away ?? '?'}` : '—',
-      stage: firstRound.label,
-      date: new Date(match.date).toLocaleDateString('pt-BR'),
-      time: new Date(match.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      status: match.status || 'SCHEDULED',
-      isUpcoming: ['SCHEDULED', 'TIMED'].includes(match.status),
-      isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
-      isFinished: match.status === 'FINISHED',
-      statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE'
-    };
-    const pendingHome = !homeTeam.id || homeTeam.name === 'TBD';
-    drawTeamNode(homeTeam, firstRadius, homeAngle, pendingHome ? GREY : BRANCH_COLORS[branchIdx], pendingHome, firstSize, 0, false);
-
-    // Time visitante
-    const awayAngle = normalizeAngle(baseAngle + step * 0.2);
-    let awayTeam = match.away || { name: 'TBD', logo: null, id: null, code: null };
-    awayTeam._matchData = {
-      opponent: match.home,
-      homeName: match.home?.name || '—',
-      awayName: awayTeam.name,
-      score: match.score ? `${match.score.home ?? '?'} × ${match.score.away ?? '?'}` : '—',
-      stage: firstRound.label,
-      date: new Date(match.date).toLocaleDateString('pt-BR'),
-      time: new Date(match.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      status: match.status || 'SCHEDULED',
-      isUpcoming: ['SCHEDULED', 'TIMED'].includes(match.status),
-      isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
-      isFinished: match.status === 'FINISHED',
-      statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE'
-    };
-    const pendingAway = !awayTeam.id || awayTeam.name === 'TBD';
-    drawTeamNode(awayTeam, firstRadius, awayAngle, pendingAway ? GREY : BRANCH_COLORS[branchIdx], pendingAway, firstSize, 0, false);
+  // --- 3. RENDERIZAR FOLHAS ---
+  let previousNodes = leaves.map((team, i) => {
+    const angleRad = (i / N) * 2 * Math.PI - Math.PI / 2;
+    const branchSize = N / 8;
+    const branchIdx = Math.floor(i / branchSize) % 8;
+    drawTeamNode(team, LEVEL_R[0], angleRad, BRANCH_COLORS[branchIdx], false);
+    return { team, angle: angleRad, branchIdx, decided: true };
   });
 
-  // ---------- 2. CONSTRUIR LISTA DE NÓS PARA CONEXÕES ----------
-  // Vamos armazenar os ângulos de cada nó por fase, indexados por posição
-  const nodesByRound = [];
-  // Primeira fase: todos os nós (home e away) em ordem
-  const firstNodes = [];
-  firstRound.matches.forEach((match, idx) => {
-    const step = 360 / totalMatches;
-    const baseAngle = idx * step;
-    firstNodes.push({ angle: normalizeAngle(baseAngle - step * 0.2), match });
-    firstNodes.push({ angle: normalizeAngle(baseAngle + step * 0.2), match });
-  });
-  nodesByRound.push(firstNodes);
+  // --- 4. RENDERIZAR FASES SEGUINTES (USANDO MATCHES JÁ PROPAGADOS) ---
+  const rounds = data.rounds || [];
+  let level = 0;
 
-  // ---------- 3. DESENHAR FASES SEGUINTES E CONECTORES ----------
-  for (let ri = 1; ri < validRounds.length; ri++) {
-    const round = validRounds[ri];
-    const matches = round.matches;
-    const radius = LEVEL_R[ri] || LEVEL_R[LEVEL_R.length - 1];
-    const sizeIdx = Math.min(ri, NODE_SIZE.length - 1);
-    const size = NODE_SIZE[sizeIdx];
-    const prevNodes = nodesByRound[ri - 1];
-    const totalPrev = prevNodes.length;
+  for (let ri = 0; ri < rounds.length; ri++) {
+    const round = rounds[ri];
+    const matches = round.matches || [];
+    const r1 = LEVEL_R[level];
+    const r2 = LEVEL_R[level + 1];
+    const rMid = (r1 + r2) / 2;
 
-    // Cada match da fase atual consome 2 nós da fase anterior (por posição)
     const currentNodes = [];
 
-    matches.forEach((match, idx) => {
-      const parentIdx1 = idx * 2;
-      const parentIdx2 = idx * 2 + 1;
+    for (let i = 0; i < matches.length; i++) {
+      const match = matches[i];
+      // Encontrar os pais usando os IDs dos times (não por posição)
+      const homeParent = previousNodes.find(n => n.team?.id === match.home?.id);
+      const awayParent = previousNodes.find(n => n.team?.id === match.away?.id);
 
-      // Ângulos dos pais (fallback para TBD se não existir)
-      let angleA, angleB;
-      if (parentIdx1 < totalPrev) {
-        angleA = prevNodes[parentIdx1].angle;
-      } else {
-        angleA = (totalPrev > 0) ? prevNodes[totalPrev - 1].angle : 0;
-      }
-      if (parentIdx2 < totalPrev) {
-        angleB = prevNodes[parentIdx2].angle;
-      } else {
-        angleB = (totalPrev > 0) ? prevNodes[totalPrev - 1].angle + 10 : 10;
-      }
+      // Se algum pai não for encontrado, pular (não desenha)
+      if (!homeParent || !awayParent) continue;
 
-      const childAngle = midAngle(angleA, angleB);
+      // Ângulo do filho = média dos ângulos dos pais (ajustado para wrap)
+      let childAngle = (homeParent.angle + awayParent.angle) / 2;
+      let diff = awayParent.angle - homeParent.angle;
+      if (diff > Math.PI) diff -= 2 * Math.PI;
+      if (diff < -Math.PI) diff += 2 * Math.PI;
+      childAngle = homeParent.angle + diff / 2;
 
-      // Determinar vencedor
+      // Determinar vencedor (já propagado, mas podemos recalcular para segurança)
       let winnerTeam = null;
       let decided = false;
-      if (match.winnerId) {
+      if (match.winnerId != null) {
         decided = true;
         winnerTeam = (match.home?.id === match.winnerId) ? match.home : match.away;
-      } else if (match.status === 'FINISHED' && match.score) {
-        const h = match.score?.home || 0;
-        const a = match.score?.away || 0;
+      } else if (match.status === "FINISHED" && match.score) {
+        const h = match.score?.home ?? 0;
+        const a = match.score?.away ?? 0;
         if (h > a) { decided = true; winnerTeam = match.home; }
         else if (a > h) { decided = true; winnerTeam = match.away; }
         else if (match.score?.penalties) {
-          const ph = match.score.penalties?.home || 0;
-          const pa = match.score.penalties?.away || 0;
+          const ph = match.score.penalties?.home ?? 0;
+          const pa = match.score.penalties?.away ?? 0;
           if (ph > pa) { decided = true; winnerTeam = match.home; }
           else if (pa > ph) { decided = true; winnerTeam = match.away; }
         }
       }
 
-      // Cor do ramo
-      const branchIdx = decided ?
-        (winnerTeam?.id === match.home?.id ? (prevNodes[parentIdx1]?.branchIdx || 0) : (prevNodes[parentIdx2]?.branchIdx || 0)) :
-        (prevNodes[parentIdx1]?.branchIdx || 0);
+      const winnerIsHome = decided && winnerTeam && winnerTeam.id === match.home?.id;
+      const branchIdx = decided
+        ? (winnerIsHome ? homeParent.branchIdx : awayParent.branchIdx)
+        : homeParent.branchIdx;
       const color = decided ? BRANCH_COLORS[branchIdx] : GREY;
 
       // Desenhar conector
-      const rMid = (LEVEL_R[ri-1] + LEVEL_R[ri]) / 2;
-      const glowLevel = Math.min(ri, GLOW_AMOUNT.length - 1);
-      const lineWidth = Math.min(ri + 1, 5);
-
-      drawConnector(
-        LEVEL_R[ri-1],
-        angleA,
-        angleB,
-        rMid,
-        childAngle,
-        LEVEL_R[ri],
-        color,
-        glowLevel,
-        lineWidth
-      );
+      drawConnector(r1, homeParent.angle, r1, awayParent.angle, rMid, childAngle, r2, color);
 
       // Criar nó do vencedor (ou TBD)
       const teamObj = winnerTeam || {
-        name: 'TBD',
+        name: `TBD`,
         logo: null,
         id: null,
         code: null,
-        _matchData: {
-          opponent: null,
-          homeName: match.home?.name || '—',
-          awayName: match.away?.name || '—',
-          score: match.score ? `${match.score.home ?? '?'} × ${match.score.away ?? '?'}` : '—',
-          stage: round.label || `Fase ${ri + 1}`,
-          date: new Date(match.date).toLocaleDateString('pt-BR'),
-          time: new Date(match.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-          status: match.status || 'SCHEDULED',
-          isUpcoming: ['SCHEDULED', 'TIMED'].includes(match.status),
-          isLive: ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status),
-          isFinished: match.status === 'FINISHED',
-          statusLabel: STATUS_LABELS[match.status] || match.status || 'EM BREVE'
-        }
       };
-      if (winnerTeam) {
-        teamObj._matchData.opponent = (match.home?.id === winnerTeam.id) ? match.away : match.home;
-      }
+      drawTeamNode(teamObj, r2, childAngle, decided ? BRANCH_COLORS[branchIdx] : GREY, !decided);
 
-      const isChampion = (ri === validRounds.length - 1) && decided && matches.length === 1;
-      drawTeamNode(
-        teamObj,
-        LEVEL_R[ri],
-        childAngle,
-        decided ? BRANCH_COLORS[branchIdx] : GREY,
-        !decided,
-        size,
-        decided ? glowLevel : 0,
-        isChampion
-      );
-
-      // Guardar para próxima fase
       currentNodes.push({
+        team: teamObj,
         angle: childAngle,
         branchIdx: branchIdx,
-        match: match,
-        team: teamObj
+        decided: decided,
       });
-    });
+    }
 
-    nodesByRound.push(currentNodes);
+    previousNodes = currentNodes;
+    level += 1;
+    if (currentNodes.length === 0) break;
   }
 
-  // ---------- 4. TAÇA NO CENTRO ----------
-  const trophyG = el('g');
-  trophyG.appendChild(el('circle', { cx: CX, cy: CY, r: 62, fill: '#0b0b0c', stroke: '#3a2c0c', 'stroke-width': 2 }));
-  const trophySize = 76;
-  trophyG.appendChild(el('image', {
-    x: CX - trophySize/2,
-    y: CY - trophySize/2,
-    width: trophySize,
-    height: trophySize,
-    href: '/taca.gif',
-    preserveAspectRatio: 'xMidYMid meet',
-    style: 'filter: drop-shadow(0 0 30px rgba(217,165,49,0.4))'
-  }));
-  svg.appendChild(trophyG);
+  drawTrophy();
 
-  // ---------- 5. ATUALIZAR UI ----------
-  updateLivePanel(data);
-  const ts = new Date(data.updatedAt).toLocaleString('pt-BR');
-  statusEl.innerHTML = `Atualizado em ${ts} <button id="refreshBtn">↻ Atualizar</button>`;
-  document.getElementById('refreshBtn')?.addEventListener('click', load);
+  const ts = new Date(data.updatedAt).toLocaleString("pt-BR");
+  statusEl.innerHTML = `Atualizado em ${ts} <button id="refreshBtn">Atualizar agora</button>`;
+  document.getElementById("refreshBtn").addEventListener("click", load);
 }
 
-// ---------- LOAD & POLLING ----------
+// ---------- LOAD E POLLING ----------
 async function load() {
-  statusEl.textContent = 'Atualizando…';
+  statusEl.textContent = "Atualizando…";
   try {
-    const res = await fetch('/api/bracket', { cache: 'no-store' });
+    const res = await fetch("/api/bracket", { cache: "no-store" });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Erro desconhecido');
-    currentData = data;
+    if (!res.ok) throw new Error(data.error || "Erro desconhecido");
     render(data);
   } catch (err) {
-    svg.innerHTML = '';
-    statusEl.innerHTML = `<div class="err">❌ ${err.message}</div>`;
+    svg.innerHTML = "";
+    statusEl.innerHTML = `<div class="err">Não foi possível carregar o bracket: ${String(err.message || err)}</div>`;
   }
 }
 
-document.getElementById('refreshBtn')?.addEventListener('click', load);
+document.getElementById("refreshBtn").addEventListener("click", load);
 load();
-setInterval(load, 90000);
+setInterval(load, POLL_MS);
+     
   </script>
 </body>
 </html>
