@@ -1229,16 +1229,14 @@ function render(data) {
     const size = NODE_SIZE[sizeIdx];
 
     if (isFirstRound) {
-      // Primeira fase: criar 2 nós por match, ângulos uniformes (0 a 360)
+      // ---------- PRIMEIRA FASE: distribuição uniforme (0 a 360) ----------
       const totalMatches = matches.length;
       const nodes = [];
 
       matches.forEach((match, idx) => {
         // Cada match ocupa um setor de 360/totalMatches graus
         const sectorAngle = 360 / totalMatches;
-        // Ângulo central do setor (distribuição uniforme)
-        const baseAngle = idx * sectorAngle;
-        // Cor do ramo baseada na posição (8 cores)
+        const baseAngle = idx * sectorAngle; // ângulo central do setor
         const branchIdx = Math.floor(idx / (totalMatches / 8)) % 8;
 
         // --- Time da casa ---
@@ -1294,20 +1292,25 @@ function render(data) {
       console.log(`📌 Fase ${ri} (${round.key}) criou ${nodes.length} nós com distribuição uniforme`);
 
     } else {
-      // Fases seguintes: matching por ID (já testado e funcionando)
+      // ---------- FASES SEGUINTES: matching por ID (usando fixtureId) ----------
       const currentNodes = [];
 
       matches.forEach((match) => {
+        // CORREÇÃO: usar fixtureId em vez de id (que é undefined)
+        const matchId = match.fixtureId || match.id;
+
+        // Procurar os pais pelo ID do time (não pela posição)
         const homeParent = previousNodes.find(n => n.team.id === match.home?.id);
         const awayParent = previousNodes.find(n => n.team.id === match.away?.id);
 
         if (!homeParent || !awayParent) {
-          console.warn(`⚠️ Pais não encontrados para match ${match.id}`, match);
+          console.warn(`⚠️ Pais não encontrados para match ${matchId}`, match);
           return;
         }
 
         const childAngle = calculateMidAngle(homeParent.angle, awayParent.angle);
 
+        // Determinar vencedor
         let winnerTeam = null;
         let decided = false;
         if (match.winnerId) {
