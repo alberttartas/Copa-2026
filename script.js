@@ -1,5 +1,5 @@
 // ============================================================
-// BRACKET CIRCULAR INTERATIVO COM ZOOM INTELIGENTE (CORRIGIDO)
+// BRACKET CIRCULAR INTERATIVO COM ZOOM INTELIGENTE
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -57,13 +57,13 @@ function getFlag2Letter(code) {
   return ISO_MAP[lower] || lower.substring(0, 2);
 }
 
-// ---------- INSTANCIAÇÃO SEGURA DO D3 ZOOM ----------
+// ---------- INSTANCIAÇÃO DO D3 ZOOM ----------
 let zoomBehavior = null;
 let svgSelection = null;
 let containerSelection = null;
 
 function initZoomSystem() {
-  if (typeof d3 === 'undefined') return; // Evita quebra se a CDN falhar momentaneamente
+  if (typeof d3 === 'undefined') return;
 
   svgSelection = d3.select('#bracket-layer');
   containerSelection = d3.select('#zoom-container');
@@ -80,7 +80,6 @@ function initZoomSystem() {
 function centerBracketInitially() {
   if (!zoomBehavior || !svgSelection) return;
   
-  // Aguarda um frame do navegador para medir o tamanho exato da tela mobile
   setTimeout(() => {
     const width = svgElement.clientWidth || window.innerWidth;
     const height = svgElement.clientHeight || window.innerHeight;
@@ -475,7 +474,6 @@ function elNS(tag, attrs = {}) {
   return el;
 }
 
-// CORREÇÃO DA VARIÁVEL: Vincula as linhas corretamente ao zoomContainer global
 function svgLayerDrawLine(p1, p2, isEliminated) {
   if(!zoomContainer) return;
   zoomContainer.appendChild(elNS('line', { x1: p1[0], y1: p1[1], x2: p2[0], y2: p2[1], stroke: isEliminated ? '#1c1c20' : '#2d2d34', 'stroke-width': 1, 'stroke-dasharray': '2,2' }));
@@ -505,7 +503,6 @@ async function load() {
     state.rounds = data.rounds || [];
     state.leaves = data.leaves || [];
     
-    // Configura o sistema D3 antes de renderizar os elementos visuais
     initZoomSystem();
     render();
     centerBracketInitially(); 
@@ -525,6 +522,6 @@ document.addEventListener('click', (e) => {
   closePanel();
 });
 
-// Inicialização segura disparada após o carregamento do DOM
-document.addEventListener('DOMContentLoaded', load);
+// Executa diretamente para blindar carregamento imediato
+load();
 setInterval(load, 60000);
