@@ -5,45 +5,39 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
   <title>Bracket Circular - Copa do Mundo 2026</title>
   <link rel="stylesheet" href="style.css">
+  
+  <script src="https://d3js.org/d3-color.v1.min.js" defer></script>
+  <script src="https://d3js.org/d3-dispatch.v1.min.js" defer></script>
+  <script src="https://d3js.org/d3-ease.v1.min.js" defer></script>
+  <script src="https://d3js.org/d3-interpolate.v1.min.js" defer></script>
+  <script src="https://d3js.org/d3-selection.v1.min.js" defer></script>
+  <script src="https://d3js.org/d3-timer.v1.min.js" defer></script>
+  <script src="https://d3js.org/d3-transition.v1.min.js" defer></script>
+  <script src="https://d3js.org/d3-drag.v1.min.js" defer></script>
+  <script src="https://d3js.org/d3-zoom.v1.min.js" defer></script>
+  
+  <script src="app.js" defer></script>
 </head>
 <body>
 
   <div id="app">
-    <!-- Banner Superior Dinâmico -->
     <div id="top-live-banner"></div>
 
-    <!-- Área do Chaveamento -->
     <div id="bracket-wrap">
       <svg id="bracket-layer" viewBox="0 0 1200 1000" preserveAspectRatio="xMidYMid slice">
-        <!-- O D3-Zoom controlará este container interno dinamicamente -->
         <g id="zoom-container"></g>
       </svg>
     </div>
 
-    <!-- Painel Lateral de Detalhes (Estilo Bottom Sheet no Mobile) -->
     <div id="panel"></div>
 
-    <!-- Tooltip Flutuante (Desktop) -->
     <div id="tooltip"></div>
 
-    <!-- Status de Sincronização de Dados -->
     <div id="status">
       <span id="statusText">Carregando...</span>
       <button id="refreshBtn">🔄 Atualizar</button>
     </div>
   </div>
 
-  <!-- Biblioteca D3-Zoom para Gestos de Pinça e Movimentação Fluida -->
-  <script src="https://d3js.org/d3-color.v1.min.js"></script>
-  <script src="https://d3js.org/d3-dispatch.v1.min.js"></script>
-  <script src="https://d3js.org/d3-ease.v1.min.js"></script>
-  <script src="https://d3js.org/d3-interpolate.v1.min.js"></script>
-  <script src="https://d3js.org/d3-selection.v1.min.js"></script>
-  <script src="https://d3js.org/d3-timer.v1.min.js"></script>
-  <script src="https://d3js.org/d3-transition.v1.min.js"></script>
-  <script src="https://d3js.org/d3-drag.v1.min.js"></script>
-  <script src="https://d3js.org/d3-zoom.v1.min.js"></script>
-  
-  <script src="app.js"></script>
 </body>
 </html>
