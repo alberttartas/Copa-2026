@@ -1,5 +1,5 @@
 // ============================================================
-// BRACKET CIRCULAR – COPA DO MUNDO 2026 (VERSÃO FINAL COMPLETA)
+// BRACKET CIRCULAR – COPA DO MUNDO 2026 (VERSÃO CORRIGIDA)
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -20,16 +20,13 @@ const state = {
   selectedMatchId: null,
   updatedAt: null,
   loading: false,
-  highlightedMatchId: null, // ID da partida Ao Vivo ou Próxima para brilhar no Bracket
+  highlightedMatchId: null,
   highlightedIsLive: false
 };
 
 // ---------- CONSTANTES GEOMÉTRICAS ----------
 const CX = 600, CY = 500;
 const LEVEL_R = [420, 360, 300, 240, 180, 120];
-
-// Raio dos círculos (nós) por rodada: crescem conforme se aproximam do centro
-// (rodada 0 = 32-avos, pequeno; última rodada = final, no centro, o maior de todos)
 const NODE_RADIUS_BY_ROUND = [13, 15.5, 19, 23.5, 29, 36];
 
 const COLOR_INACTIVE_LINE = '#26262b';
@@ -41,7 +38,6 @@ const TEAM_COLORS = {
   GER: '#d1d1d1', POR: '#991116', ESP: '#bd1117', USA: '#042247'
 };
 
-// ---------- ORDEM DOS SLOTS (BRACKET COPA) ----------
 const POSITION_ORDER = [
   'BEL', 'SEN', 'USA', 'BIH', 'ESP', 'AUT', 'POR', 'CRO',
   'RSA', 'CAN', 'NED', 'MAR', 'GER', 'PAR', 'FRA', 'SWE',
@@ -53,7 +49,7 @@ const INDEX_GEOMETRY_MAP = {};
 for(let i=0; i<16; i++) INDEX_GEOMETRY_MAP[i] = { side: 'left', pos: i };
 for(let i=16; i<32; i++) INDEX_GEOMETRY_MAP[i] = { side: 'right', pos: i - 16 };
 
-// ---------- CONSTRUTORES DO LAYOUT GEOMÉTRICO ----------
+// ---------- CONSTRUTORES DO LAYOUT ----------
 function buildFixedLayout() {
   const totalLeaves = 32;
   const totalRounds = Math.log2(totalLeaves) + 1;
@@ -153,9 +149,6 @@ function mapApiToSlots() {
   return layout;
 }
 
-// ============================================================
-// DETECÇÃO DA PARTIDA AO VIVO / PRÓXIMA (usado no header E no bracket)
-// ============================================================
 function findLiveOrNextMatch() {
   let liveMatches = [];
   let upcomingMatches = [];
@@ -177,9 +170,7 @@ function findLiveOrNextMatch() {
   return { match: null, isLive: false };
 }
 
-// ============================================================
-// HEADER SUPERIOR DA PÁGINA (CABEÇALHO DINÂMICO)
-// ============================================================
+// ---------- HEADER BANNER ----------
 function renderTopHeaderBanner(targetMatch, isLive) {
   if (!topBannerEl) return;
 
@@ -220,9 +211,7 @@ function renderTopHeaderBanner(targetMatch, isLive) {
   }
 }
 
-// ============================================================
-// PAINEL INTERATIVO LATERAL / CENTRAL (CLIQUE NO NÓ)
-// ============================================================
+// ---------- PAINEL INTERATIVO GRANDE (MODIFICADO) ----------
 function closePanel() {
   state.selectedMatchId = null;
   if (panelEl) panelEl.classList.remove('visible');
@@ -266,7 +255,7 @@ function renderInteractivePanel() {
     const dateObj = new Date(match.date);
     const dateStr = dateObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
     const timeStr = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    
+
     panelHeaderHtml = `
       <div style="background: rgba(204, 154, 24, 0.08); border: 1px solid #cc9a18; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 16px;">
         <div style="font-size: 10px; color: #cc9a18; font-weight: bold;">📅 DATA E HORA DO CONFRONTO</div>
@@ -307,7 +296,8 @@ function renderInteractivePanel() {
       </div>
   `;
 
-  if (match.status === 'FINISHED') {
+  // CORREÇÃO: Removeu a obrigatoriedade de 'FINISHED' para mostrar artilheiros
+  if ((homeCode && homeCode !== 'TBD') || (awayCode && awayCode !== 'TBD')) {
     contentHtml += `
       <div style="border-top: 1px solid #1f1f23; padding-top: 12px;">
         <div style="font-size: 12px; font-weight: bold; color: #e4e4e7; margin-bottom: 8px; text-align: center;">🎯 Artilheiro e Gols</div>
@@ -318,7 +308,7 @@ function renderInteractivePanel() {
       if (sc.code && sc.code !== 'TBD') {
         const name = sc.data ? sc.data.name : 'Sem gols anotados';
         const goals = sc.data ? `${sc.data.goals} Gols` : '0';
-        
+
         contentHtml += `
           <div style="text-align: center; background: #09090b; border: 1px solid #1c1c1f; padding: 8px 6px; border-radius: 6px; width: 46%;">
             <img src="assets/img/art/${sc.code}.png" width="42" height="42" style="border-radius: 50%; object-fit: cover; border: 1px solid #cc9a18; background:#141416; margin-bottom: 4px;" 
@@ -341,15 +331,11 @@ function renderInteractivePanel() {
   if (closeBtn) closeBtn.onclick = closePanel;
 }
 
-// ============================================================
-// RENDERIZAÇÃO GRÁFICA DO SVG (BRACKET CIRCULAR)
-// ============================================================
+// ---------- RENDERIZAÇÃO GRÁFICA DO SVG ----------
 function render() {
   if (!svgLayer) return;
   clearSVG();
 
-  // Descobre a partida ao vivo/próxima ANTES de desenhar os nós,
-  // para que o destaque (pulse) já apareça no bracket na primeira renderização.
   const { match: targetMatch, isLive } = findLiveOrNextMatch();
   state.highlightedMatchId = targetMatch ? targetMatch.fixtureId : null;
   state.highlightedIsLive = isLive;
@@ -394,7 +380,6 @@ function drawNode(slot) {
   g.appendChild(elNS('circle', { cx: x, cy: y, r: nodeRadius, fill: nodeFill, stroke: nodeStroke, 'stroke-width': nodeStrokeWidth }));
 
   if (isMatchHighlighted) {
-    // Halo extra ao redor do nó em destaque (ao vivo / próximo jogo) para ficar bem visível no bracket
     g.appendChild(elNS('circle', {
       cx: x, cy: y, r: nodeRadius + 7, fill: 'none',
       stroke: isLiveGlobalColor(state.highlightedIsLive), 'stroke-width': 1.4, 'stroke-dasharray': '3,3',
@@ -405,13 +390,13 @@ function drawNode(slot) {
   if (hasActiveTeam) {
     const countryCodeUpper = team.code.toUpperCase();
     const countryCodeLower = team.code.toLowerCase();
-    
+
     const isoMap = {
       bra: 'br', fra: 'fr', ger: 'de', esp: 'es', arg: 'ar', can: 'ca', mex: 'mx', usa: 'us',
       eng: 'gb-eng', nor: 'no', por: 'pt', ita: 'it', jpn: 'jp', mar: 'ma', sui: 'ch', egy: 'eg'
     };
     const flag2Letter = isoMap[countryCodeLower] || countryCodeLower.substring(0, 2);
-    
+
     const clipId = `clip-r${round}-n${slot.index}-${countryCodeLower}`;
     const clipPath = elNS('clipPath', { id: clipId });
     clipPath.appendChild(elNS('circle', { cx: x, cy: y, r: nodeRadius - 0.5 }));
@@ -437,7 +422,7 @@ function drawNode(slot) {
 
       imgFederation.onerror = () => imgFederation.remove();
       svgLayer.appendChild(imgFederation);
-      
+
       const [lx, ly] = polar(radius + 14, angle);
       svgLayer.appendChild(elNS('line', {
         x1: lx, y1: ly, x2: sx, y2: sy,
@@ -451,14 +436,19 @@ function drawNode(slot) {
   }
 
   g.onmouseenter = (e) => {
+    // Só renderiza o tooltip pequeno se o painel grande não estiver aberto
+    if (state.selectedMatchId) return;
     const rect = svgLayer.getBoundingClientRect();
     state.hover = { x: e.clientX - rect.left, y: e.clientY - rect.top, matchId };
     renderTooltipOnly();
   };
   g.onmouseleave = () => { state.hover = null; renderTooltipOnly(); };
 
+  // CORREÇÃO: Limpa o modal pequeno imediatamente no clique
   g.onclick = () => {
     if (matchId) {
+      state.hover = null; 
+      renderTooltipOnly(); 
       state.selectedMatchId = matchId;
       renderInteractivePanel();
     }
@@ -547,7 +537,10 @@ function elNS(tag, attrs = {}) {
   return el;
 }
 
-function clearSVG() { while (svgLayer.firstChild) svgLayer.removeChild(svgLayer.firstChild); }
+// CORREÇÃO ESSENCIAL: Reseta completamente a árvore DOM interna eliminando os artefatos visuais
+function clearSVG() { 
+  if (svgLayer) svgLayer.innerHTML = ''; 
+}
 
 function drawBackground() {
   const defs = elNS('defs', { id: 'defs' });
@@ -574,7 +567,7 @@ function drawTrophy() {
   svgLayer.appendChild(g);
 }
 
-// ---------- SINKRONIZAÇÃO COM A API ----------
+// ---------- SINCRONIZAÇÃO COM A API ----------
 async function load() {
   state.loading = true;
   if (statusText) statusText.textContent = 'Atualizando...';
@@ -584,7 +577,7 @@ async function load() {
     state.rounds = data.rounds || [];
     state.leaves = data.leaves || [];
     state.updatedAt = data.updatedAt || null;
-    
+
     render();
     if (state.selectedMatchId) renderInteractivePanel();
     if (statusText) statusText.textContent = '✓ Sincronizado';
@@ -597,7 +590,6 @@ async function load() {
 
 if (refreshBtn) refreshBtn.addEventListener('click', load);
 
-// Fecha o painel ao tocar/clicar fora dele ou no SVG (útil no mobile)
 document.addEventListener('click', (e) => {
   if (!panelEl || !panelEl.classList.contains('visible')) return;
   if (panelEl.contains(e.target)) return;
@@ -606,4 +598,4 @@ document.addEventListener('click', (e) => {
 });
 
 load();
-setInterval(load, 60000); // Polling automático a cada 1 minuto
+setInterval(load, 60000);
