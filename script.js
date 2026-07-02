@@ -20,12 +20,17 @@ const state = {
   selectedMatchId: null,
   updatedAt: null,
   loading: false,
-  highlightedMatchId: null // ID da partida Ao Vivo ou Próxima para brilhar no Bracket
+  highlightedMatchId: null, // ID da partida Ao Vivo ou Próxima para brilhar no Bracket
+  highlightedIsLive: false
 };
 
 // ---------- CONSTANTES GEOMÉTRICAS ----------
 const CX = 600, CY = 500;
 const LEVEL_R = [420, 360, 300, 240, 180, 120];
+
+// Raio dos círculos (nós) por rodada: crescem conforme se aproximam do centro
+// (rodada 0 = 32-avos, pequeno; última rodada = final, no centro, o maior de todos)
+const NODE_RADIUS_BY_ROUND = [13, 15.5, 19, 23.5, 29, 36];
 
 const COLOR_INACTIVE_LINE = '#26262b';
 const COLOR_INACTIVE_NODE = '#111113';
@@ -149,11 +154,9 @@ function mapApiToSlots() {
 }
 
 // ============================================================
-// HEADER SUPERIOR DA PÁGINA (CABEÇALHO DINÂMICO)
+// DETECÇÃO DA PARTIDA AO VIVO / PRÓXIMA (usado no header E no bracket)
 // ============================================================
-function renderTopHeaderBanner() {
-  if (!topBannerEl || state.rounds.length === 0) return;
-
+function findLiveOrNextMatch() {
   let liveMatches = [];
   let upcomingMatches = [];
 
@@ -169,17 +172,16 @@ function renderTopHeaderBanner() {
 
   upcomingMatches.sort((a, b) => new Date(a.date) - new Date(b.date));
 
-  let targetMatch = null;
-  let isLive = false;
+  if (liveMatches.length > 0) return { match: liveMatches[0], isLive: true };
+  if (upcomingMatches.length > 0) return { match: upcomingMatches[0], isLive: false };
+  return { match: null, isLive: false };
+}
 
-  if (liveMatches.length > 0) {
-    targetMatch = liveMatches[0];
-    isLive = true;
-  } else if (upcomingMatches.length > 0) {
-    targetMatch = upcomingMatches[0];
-  }
-
-  state.highlightedMatchId = targetMatch ? targetMatch.fixtureId : null;
+// ============================================================
+// HEADER SUPERIOR DA PÁGINA (CABEÇALHO DINÂMICO)
+// ============================================================
+function renderTopHeaderBanner(targetMatch, isLive) {
+  if (!topBannerEl) return;
 
   if (!targetMatch) {
     topBannerEl.innerHTML = `<div style="text-align:center; color:#71717a; font-size:12px; padding:12px; font-family:sans-serif;">🏆 Todas as partidas agendadas foram encerradas!</div>`;
@@ -193,14 +195,14 @@ function renderTopHeaderBanner() {
 
   if (isLive) {
     topBannerEl.innerHTML = `
-      <div style="background: linear-gradient(90deg, #591010, #0c0c0e); border-bottom: 2px solid #ef4444; padding: 12px 20px; display: flex; justify-content: center; align-items: center; gap: 20px; font-family: sans-serif;">
-        <span style="background: #ef4444; color: #fff; font-size: 10px; font-weight: bold; padding: 3px 8px; border-radius: 4px; animation: pulse 1.5s infinite;">🔴 AO VIVO</span>
-        <div style="display: flex; align-items: center; gap: 12px; color: #fff; font-weight: bold; font-size: 14px;">
-          ${homeCode ? `<img src="assets/img/federations/${homeCode}.svg" width="26" height="26" onerror="this.style.display='none'" />` : ''} 
-          <span>${home}</span>
-          <span style="background: #18181b; border: 1px solid #2d2d34; padding: 4px 14px; border-radius: 4px; font-size: 18px; color: #cc9a18; margin: 0 10px; font-weight:900;">${targetMatch.score?.home ?? 0} × ${targetMatch.score?.away ?? 0}</span>
-          <span>${away}</span> 
-          ${awayCode ? `<img src="assets/img/federations/${awayCode}.svg" width="26" height="26" onerror="this.style.display='none'" />` : ''}
+      <div class="banner-inner banner-live">
+        <span class="banner-tag banner-tag-live">🔴 AO VIVO</span>
+        <div class="banner-match">
+          ${homeCode ? `<img src="assets/img/federations/${homeCode}.svg" class="banner-flag" onerror="this.style.display='none'" />` : ''} 
+          <span class="banner-team">${home}</span>
+          <span class="banner-score">${targetMatch.score?.home ?? 0} × ${targetMatch.score?.away ?? 0}</span>
+          <span class="banner-team">${away}</span> 
+          ${awayCode ? `<img src="assets/img/federations/${awayCode}.svg" class="banner-flag" onerror="this.style.display='none'" />` : ''}
         </div>
       </div>`;
   } else {
@@ -209,10 +211,10 @@ function renderTopHeaderBanner() {
     const timeStr = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
     topBannerEl.innerHTML = `
-      <div style="background: #09090b; border-bottom: 1px solid #cc9a18; padding: 12px 20px; display: flex; justify-content: center; align-items: center; gap: 15px; font-family: sans-serif;">
-        <span style="color: #cc9a18; font-size: 10px; font-weight: bold; border: 1px solid #cc9a18; padding: 2px 6px; border-radius: 4px; letter-spacing:0.5px;">📅 PRÓXIMO JOGO</span>
-        <div style="color: #e4e4e7; font-size: 13px; font-weight: 500;">
-          <strong>${home}</strong> vs <strong>${away}</strong> <span style="color: #cc9a18; font-weight:bold; margin-left: 10px;">(${dateStr} às ${timeStr})</span>
+      <div class="banner-inner banner-next">
+        <span class="banner-tag banner-tag-next">📅 PRÓXIMO JOGO</span>
+        <div class="banner-match-text">
+          <strong>${home}</strong> vs <strong>${away}</strong> <span class="banner-date">(${dateStr} às ${timeStr})</span>
         </div>
       </div>`;
   }
@@ -221,6 +223,12 @@ function renderTopHeaderBanner() {
 // ============================================================
 // PAINEL INTERATIVO LATERAL / CENTRAL (CLIQUE NO NÓ)
 // ============================================================
+function closePanel() {
+  state.selectedMatchId = null;
+  if (panelEl) panelEl.classList.remove('visible');
+  document.body.classList.remove('panel-open');
+}
+
 function renderInteractivePanel() {
   if (!panelEl || !state.selectedMatchId) return;
 
@@ -268,6 +276,7 @@ function renderInteractivePanel() {
 
   let contentHtml = `
     <div style="position: relative; padding: 12px; font-family: sans-serif;">
+      <button id="panelCloseBtn" aria-label="Fechar" style="position:absolute; top:0; right:0; width:28px; height:28px; border-radius:50%; border:1px solid #26262b; background:#09090b; color:#a1a1aa; font-size:14px; line-height:1; cursor:pointer;">✕</button>
       <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #a1a1aa; font-weight: bold; margin-bottom: 10px; text-align: center;">🏆 ${stage}</div>
       
       ${panelHeaderHtml}
@@ -326,6 +335,10 @@ function renderInteractivePanel() {
   contentHtml += `</div>`;
   panelEl.innerHTML = contentHtml;
   panelEl.classList.add('visible');
+  document.body.classList.add('panel-open');
+
+  const closeBtn = document.getElementById('panelCloseBtn');
+  if (closeBtn) closeBtn.onclick = closePanel;
 }
 
 // ============================================================
@@ -334,6 +347,12 @@ function renderInteractivePanel() {
 function render() {
   if (!svgLayer) return;
   clearSVG();
+
+  // Descobre a partida ao vivo/próxima ANTES de desenhar os nós,
+  // para que o destaque (pulse) já apareça no bracket na primeira renderização.
+  const { match: targetMatch, isLive } = findLiveOrNextMatch();
+  state.highlightedMatchId = targetMatch ? targetMatch.fixtureId : null;
+  state.highlightedIsLive = isLive;
 
   const layout = mapApiToSlots();
 
@@ -347,7 +366,7 @@ function render() {
   }
 
   drawTrophy();
-  renderTopHeaderBanner();
+  renderTopHeaderBanner(targetMatch, isLive);
 }
 
 function drawNode(slot) {
@@ -358,7 +377,8 @@ function drawNode(slot) {
   const g = elNS('g', { 'data-match-id': matchId || '', style: 'cursor: pointer;' });
 
   const hasActiveTeam = team && team.code && team.code !== 'TBD';
-  const nodeRadius = hasActiveTeam && !isEliminated ? 17 : 14;
+  const baseRadius = NODE_RADIUS_BY_ROUND[round] ?? NODE_RADIUS_BY_ROUND[NODE_RADIUS_BY_ROUND.length - 1];
+  const nodeRadius = hasActiveTeam && !isEliminated ? baseRadius : Math.max(9, baseRadius - 4);
 
   const isMatchHighlighted = matchId && matchId === state.highlightedMatchId;
 
@@ -372,6 +392,15 @@ function drawNode(slot) {
   }
 
   g.appendChild(elNS('circle', { cx: x, cy: y, r: nodeRadius, fill: nodeFill, stroke: nodeStroke, 'stroke-width': nodeStrokeWidth }));
+
+  if (isMatchHighlighted) {
+    // Halo extra ao redor do nó em destaque (ao vivo / próximo jogo) para ficar bem visível no bracket
+    g.appendChild(elNS('circle', {
+      cx: x, cy: y, r: nodeRadius + 7, fill: 'none',
+      stroke: isLiveGlobalColor(state.highlightedIsLive), 'stroke-width': 1.4, 'stroke-dasharray': '3,3',
+      class: 'highlighted-halo'
+    }));
+  }
 
   if (hasActiveTeam) {
     const countryCodeUpper = team.code.toUpperCase();
@@ -416,7 +445,7 @@ function drawNode(slot) {
       }));
     }
   } else {
-    const t = elNS('text', { x, y: y + 3, 'text-anchor': 'middle', 'font-size': 7, fill: '#28282d', 'font-weight': 'bold', 'font-family': 'sans-serif' });
+    const t = elNS('text', { x, y: y + 3, 'text-anchor': 'middle', 'font-size': Math.max(6, Math.round(nodeRadius * 0.4)), fill: '#28282d', 'font-weight': 'bold', 'font-family': 'sans-serif' });
     t.textContent = 'TBD';
     g.appendChild(t);
   }
@@ -436,6 +465,10 @@ function drawNode(slot) {
   };
 
   svgLayer.appendChild(g);
+}
+
+function isLiveGlobalColor(isLive) {
+  return isLive ? '#ef4444' : '#cc9a18';
 }
 
 function drawFixedConnections(layout) {
@@ -563,5 +596,14 @@ async function load() {
 }
 
 if (refreshBtn) refreshBtn.addEventListener('click', load);
+
+// Fecha o painel ao tocar/clicar fora dele ou no SVG (útil no mobile)
+document.addEventListener('click', (e) => {
+  if (!panelEl || !panelEl.classList.contains('visible')) return;
+  if (panelEl.contains(e.target)) return;
+  if (e.target.closest && e.target.closest('[data-match-id]')) return;
+  closePanel();
+});
+
 load();
 setInterval(load, 60000); // Polling automático a cada 1 minuto
