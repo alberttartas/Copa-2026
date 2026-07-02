@@ -14,6 +14,22 @@ body {
   margin: 0;
   -webkit-font-smoothing: antialiased;
 }
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+/* Aplica efeito pulsante no contorno do nó do SVG */
+.highlighted-node-pulse circle {
+  animation: svgPulse 2s infinite ease-in-out;
+}
+
+@keyframes svgPulse {
+  0% { stroke-width: 2px; stroke: #cc9a18; }
+  50% { stroke-width: 4.5px; stroke: #ef4444; filter: drop-shadow(0px 0px 8px #ef4444); }
+  100% { stroke-width: 2px; stroke: #cc9a18; }
+}
 
 /* ===== LAYOUT PRINCIPAL ===== */
 #app {
