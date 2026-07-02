@@ -1,5 +1,5 @@
 // ============================================================
-// BRACKET CIRCULAR – COPA DO MUNDO 2026 (VERSÃO CORRIGIDA)
+// BRACKET CIRCULAR – COPA DO MUNDO 2026 (VERSÃO ATUALIZADA)
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -23,6 +23,23 @@ const state = {
   highlightedMatchId: null,
   highlightedIsLive: false
 };
+
+// ---------- DICIONÁRIO DE TRADUÇÃO (PT-BR) ----------
+const TRANSLATED_TEAMS = {
+  'BEL': 'Bélgica', 'SEN': 'Senegal', 'USA': 'Estados Unidos', 'BIH': 'Bósnia',
+  'ESP': 'Espanha', 'AUT': 'Áustria', 'POR': 'Portugal', 'CRO': 'Croácia',
+  'RSA': 'África do Sul', 'CAN': 'Canadá', 'NED': 'Holanda', 'MAR': 'Marrocos',
+  'GER': 'Alemanha', 'PAR': 'Paraguai', 'FRA': 'França', 'SWE': 'Suécia',
+  'BRA': 'Brasil', 'JPN': 'Japão', 'CIV': 'Costa do Marfim', 'NOR': 'Noruega',
+  'MEX': 'México', 'ECU': 'Equador', 'ENG': 'Inglaterra', 'COD': 'RD Congo',
+  'AUS': 'Austrália', 'EGY': 'Egito', 'ARG': 'Argentina', 'CPV': 'Cabo Verde',
+  'SUI': 'Suíça', 'ALG': 'Argélia', 'COL': 'Colômbia', 'GHA': 'Gana', 'TBD': 'A definir'
+};
+
+function getTeamName(code, fallbackName) {
+  if (!code || code === 'TBD') return 'A definir';
+  return TRANSLATED_TEAMS[code.toUpperCase()] || fallbackName || 'A definir';
+}
 
 // ---------- CONSTANTES GEOMÉTRICAS ----------
 const CX = 600, CY = 500;
@@ -170,7 +187,7 @@ function findLiveOrNextMatch() {
   return { match: null, isLive: false };
 }
 
-// ---------- HEADER BANNER ----------
+// ---------- HEADER BANNER (TRADUZIDO) ----------
 function renderTopHeaderBanner(targetMatch, isLive) {
   if (!topBannerEl) return;
 
@@ -179,10 +196,10 @@ function renderTopHeaderBanner(targetMatch, isLive) {
     return;
   }
 
-  const home = targetMatch.home?.name || 'TBD';
-  const away = targetMatch.away?.name || 'TBD';
   const homeCode = targetMatch.home?.code?.toUpperCase();
   const awayCode = targetMatch.away?.code?.toUpperCase();
+  const home = getTeamName(homeCode, targetMatch.home?.name);
+  const away = getTeamName(awayCode, targetMatch.away?.name);
 
   if (isLive) {
     topBannerEl.innerHTML = `
@@ -211,7 +228,7 @@ function renderTopHeaderBanner(targetMatch, isLive) {
   }
 }
 
-// ---------- PAINEL INTERATIVO GRANDE (MODIFICADO) ----------
+// ---------- PAINEL INTERATIVO (LADO A LADO PREMIUM) ----------
 function closePanel() {
   state.selectedMatchId = null;
   if (panelEl) panelEl.classList.remove('visible');
@@ -229,10 +246,12 @@ function renderInteractivePanel() {
 
   if (!match) return;
 
-  const homeName = match.home?.name || 'A definir';
-  const awayName = match.away?.name || 'A definir';
   const homeCode = match.home?.code?.toUpperCase();
   const awayCode = match.away?.code?.toUpperCase();
+  
+  // Tratamento de nomes em PT-BR
+  const homeName = getTeamName(homeCode, match.home?.name);
+  const awayName = getTeamName(awayCode, match.away?.name);
   const stage = match.stage || 'Copa do Mundo';
 
   const homeScorer = match.home?.topScorer;
@@ -259,70 +278,61 @@ function renderInteractivePanel() {
     panelHeaderHtml = `
       <div style="background: rgba(204, 154, 24, 0.08); border: 1px solid #cc9a18; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 16px;">
         <div style="font-size: 10px; color: #cc9a18; font-weight: bold;">📅 DATA E HORA DO CONFRONTO</div>
-        <div style="font-size: 15px; font-weight: bold; color: #fff; margin-top: 4px;">${dateStr} às ${timeStr}</div>
+        <div style="font-size: 14px; font-weight: bold; color: #fff; margin-top: 4px;">${dateStr} às ${timeStr}</div>
       </div>`;
   }
 
+  // Montagem do novo layout integrado lado a lado
   let contentHtml = `
-    <div style="position: relative; padding: 12px; font-family: sans-serif;">
-      <button id="panelCloseBtn" aria-label="Fechar" style="position:absolute; top:0; right:0; width:28px; height:28px; border-radius:50%; border:1px solid #26262b; background:#09090b; color:#a1a1aa; font-size:14px; line-height:1; cursor:pointer;">✕</button>
-      <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #a1a1aa; font-weight: bold; margin-bottom: 10px; text-align: center;">🏆 ${stage}</div>
+    <div style="position: relative; padding: 4px; font-family: sans-serif;">
+      <button id="panelCloseBtn" aria-label="Fechar" style="position:absolute; top:-4px; right:0; width:28px; height:28px; border-radius:50%; border:1px solid #26262b; background:#09090b; color:#a1a1aa; font-size:14px; line-height:1; cursor:pointer; z-index:10;">✕</button>
+      <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #a1a1aa; font-weight: bold; margin-bottom: 14px; text-align: center;">🏆 ${stage}</div>
       
       ${panelHeaderHtml}
       
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; background: #070708; padding: 12px 8px; border-radius: 8px; border: 1px solid #121215;">
-        <div style="text-align: center; flex: 1;">
-          ${homeCode && match.home?.name !== 'TBD' 
-            ? `<img src="assets/img/federations/${homeCode}.svg" width="44" height="44" onerror="this.style.opacity='0.3'" style="margin-bottom:6px; display:block; margin-left:auto; margin-right:auto;" />` 
-            : `<div style="font-size:24px; margin-bottom:6px;">❓</div>`
-          }
-          <div style="font-weight: bold; font-size: 13px; color: #fff; line-height: 1.2;">${homeName}</div>
+      <div class="panel-teams-row">
+        <div class="panel-team-column">
+          <div class="panel-visual-pair">
+            ${homeCode && match.home?.name !== 'TBD' 
+              ? `<img src="assets/img/federations/${homeCode}.svg" class="badge" onerror="this.style.opacity='0.3'" />` 
+              : `<div style="font-size:24px;">❓</div>`
+            }
+            ${homeCode && match.home?.name !== 'TBD'
+              ? `<img src="assets/img/art/${homeCode}.png" class="scorer-photo" onerror="this.src='https://flagcdn.com/${homeCode.toLowerCase().substring(0,2)}.svg'; this.style.borderRadius='4px';" />`
+              : `<div style="font-size:24px;">👤</div>`
+            }
+          </div>
+          <div class="panel-team-name">${homeName}</div>
+          <div class="panel-scorer-name" title="${homeScorer ? homeScorer.name : 'Sem Gols'}">${homeScorer ? homeScorer.name : '-'}</div>
+          <div class="panel-scorer-info">⚽ ${homeScorer ? homeScorer.goals : 0} Gols</div>
         </div>
         
-        <div style="padding: 0 6px; text-align: center; min-width: 65px;">
+        <div class="panel-score-center">
           ${match.status === 'FINISHED' || isLive
-            ? `<div style="font-size: 22px; font-weight: 900; color: ${isLive ? '#ef4444' : '#cc9a18'};">${match.score?.home ?? 0}-${match.score?.away ?? 0}</div>`
-            : `<div style="font-size: 12px; font-weight: bold; background: #1a1a1e; padding: 4px 10px; border-radius: 4px; color: #71717a;">VS</div>`
+            ? `<div class="panel-big-score" style="color: ${isLive ? '#ef4444' : '#cc9a18'};">${match.score?.home ?? 0}–${match.score?.away ?? 0}</div>`
+            : `<div class="panel-vs-badge">VS</div>`
           }
         </div>
 
-        <div style="text-align: center; flex: 1;">
-          ${awayCode && match.away?.name !== 'TBD' 
-            ? `<img src="assets/img/federations/${awayCode}.svg" width="44" height="44" onerror="this.style.opacity='0.3'" style="margin-bottom:6px; display:block; margin-left:auto; margin-right:auto;" />` 
-            : `<div style="font-size:24px; margin-bottom:6px;">❓</div>`
-          }
-          <div style="font-weight: bold; font-size: 13px; color: #fff; line-height: 1.2;">${awayName}</div>
+        <div class="panel-team-column">
+          <div class="panel-visual-pair">
+            ${awayCode && match.away?.name !== 'TBD' 
+              ? `<img src="assets/img/art/${awayCode}.png" class="scorer-photo" onerror="this.src='https://flagcdn.com/${awayCode.toLowerCase().substring(0,2)}.svg'; this.style.borderRadius='4px';" />`
+              : `<div style="font-size:24px;">👤</div>`
+            }
+            ${awayCode && match.away?.name !== 'TBD' 
+              ? `<img src="assets/img/federations/${awayCode}.svg" class="badge" onerror="this.style.opacity='0.3'" />` 
+              : `<div style="font-size:24px;">❓</div>`
+            }
+          </div>
+          <div class="panel-team-name">${awayName}</div>
+          <div class="panel-scorer-name" title="${awayScorer ? awayScorer.name : 'Sem Gols'}">${awayScorer ? awayScorer.name : '-'}</div>
+          <div class="panel-scorer-info">⚽ ${awayScorer ? awayScorer.goals : 0} Gols</div>
         </div>
       </div>
+    </div>
   `;
 
-  // CORREÇÃO: Removeu a obrigatoriedade de 'FINISHED' para mostrar artilheiros
-  if ((homeCode && homeCode !== 'TBD') || (awayCode && awayCode !== 'TBD')) {
-    contentHtml += `
-      <div style="border-top: 1px solid #1f1f23; padding-top: 12px;">
-        <div style="font-size: 12px; font-weight: bold; color: #e4e4e7; margin-bottom: 8px; text-align: center;">🎯 Artilheiro e Gols</div>
-        <div style="display: flex; gap: 8px; justify-content: space-around;">
-    `;
-
-    [{ code: homeCode, data: homeScorer }, { code: awayCode, data: awayScorer }].forEach(sc => {
-      if (sc.code && sc.code !== 'TBD') {
-        const name = sc.data ? sc.data.name : 'Sem gols anotados';
-        const goals = sc.data ? `${sc.data.goals} Gols` : '0';
-
-        contentHtml += `
-          <div style="text-align: center; background: #09090b; border: 1px solid #1c1c1f; padding: 8px 6px; border-radius: 6px; width: 46%;">
-            <img src="assets/img/art/${sc.code}.png" width="42" height="42" style="border-radius: 50%; object-fit: cover; border: 1px solid #cc9a18; background:#141416; margin-bottom: 4px;" 
-              onerror="this.src='https://flagcdn.com/${sc.code.toLowerCase().substring(0,2)}.svg'; this.style.borderRadius='4px';" />
-            <div style="font-size: 11px; font-weight: bold; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${name}">${name}</div>
-            <div style="font-size: 10px; color: #cc9a18; font-weight: bold; margin-top: 2px;">⚽ ${goals}</div>
-          </div>`;
-      }
-    });
-
-    contentHtml += `</div></div>`;
-  }
-
-  contentHtml += `</div>`;
   panelEl.innerHTML = contentHtml;
   panelEl.classList.add('visible');
   document.body.classList.add('panel-open');
@@ -397,7 +407,9 @@ function drawNode(slot) {
     };
     const flag2Letter = isoMap[countryCodeLower] || countryCodeLower.substring(0, 2);
 
-    const clipId = `clip-r${round}-n${slot.index}-${countryCodeLower}`;
+    // CORREÇÃO MESTRA: Uso de Timestamp temporal único para invalidar cache de GPU de mobile
+    const uniqueTime = Date.now();
+    const clipId = `clip-r${round}-n${slot.index}-${countryCodeLower}-${uniqueTime}`;
     const clipPath = elNS('clipPath', { id: clipId });
     clipPath.appendChild(elNS('circle', { cx: x, cy: y, r: nodeRadius - 0.5 }));
     svgLayer.appendChild(clipPath);
@@ -436,19 +448,17 @@ function drawNode(slot) {
   }
 
   g.onmouseenter = (e) => {
-    // Só renderiza o tooltip pequeno se o painel grande não estiver aberto
-    if (state.selectedMatchId) return;
+    if (state.selectedMatchId) return; // Se o painel estiver aberto, ignora tooltip pequeno
     const rect = svgLayer.getBoundingClientRect();
     state.hover = { x: e.clientX - rect.left, y: e.clientY - rect.top, matchId };
     renderTooltipOnly();
   };
   g.onmouseleave = () => { state.hover = null; renderTooltipOnly(); };
 
-  // CORREÇÃO: Limpa o modal pequeno imediatamente no clique
   g.onclick = () => {
     if (matchId) {
       state.hover = null; 
-      renderTooltipOnly(); 
+      renderTooltipOnly(); // Limpa modal pequeno imediatamente
       state.selectedMatchId = matchId;
       renderInteractivePanel();
     }
@@ -508,6 +518,7 @@ function drawSeparatedBezierConnection(r1, angleA, col1, w1, r2, angleB, col2, w
   svgLayer.appendChild(elNS('path', { d: `M${cx},${cy} L${cx2},${cy2}`, stroke: colJ, fill: 'none', 'stroke-width': wJ }));
 }
 
+// ---------- TOOLPIT PEQUENO (TRADUZIDO) ----------
 function renderTooltipOnly() {
   if (!tooltipEl) return;
   const hover = state.hover;
@@ -520,8 +531,8 @@ function renderTooltipOnly() {
   }
   if (!match) { tooltipEl.classList.remove('visible'); return; }
 
-  const home = match.home?.name || 'TBD';
-  const away = match.away?.name || 'TBD';
+  const home = getTeamName(match.home?.code, match.home?.name);
+  const away = getTeamName(match.away?.code, match.away?.name);
   const score = match.status === 'FINISHED' ? `${match.score?.home ?? 0} – ${match.score?.away ?? 0}` : 'A Jogar';
 
   tooltipEl.innerHTML = `<div><strong>${home}</strong> vs <strong>${away}</strong></div><div style="font-size:11px;color:#cc9a18;margin-top:2px;">${score}</div>`;
@@ -537,7 +548,6 @@ function elNS(tag, attrs = {}) {
   return el;
 }
 
-// CORREÇÃO ESSENCIAL: Reseta completamente a árvore DOM interna eliminando os artefatos visuais
 function clearSVG() { 
   if (svgLayer) svgLayer.innerHTML = ''; 
 }
