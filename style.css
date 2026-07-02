@@ -11,10 +11,11 @@ html, body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   overflow: hidden;
   height: 100%;
+  width: 100%;
   margin: 0;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
-  touch-action: manipulation;
+  touch-action: none; /* Deixa o D3 gerenciar os gestos de toque perfeitamente */
 }
 
 @keyframes pulse {
@@ -22,7 +23,6 @@ html, body {
   50% { opacity: 0.4; }
 }
 
-/* Aplica efeito pulsante no contorno do nó do SVG */
 .highlighted-node-pulse circle:first-child {
   animation: svgPulse 2s infinite ease-in-out;
 }
@@ -56,7 +56,7 @@ html, body {
   flex-direction: column;
 }
 
-/* ===== BANNER SUPERIOR (AO VIVO / PRÓXIMO JOGO) ===== */
+/* ===== BANNER SUPERIOR ===== */
 #top-live-banner {
   position: relative;
   z-index: 60;
@@ -134,17 +134,16 @@ html, body {
   margin-left: 8px;
 }
 
-/* ===== SVG LAYER (SOLUÇÃO DE FALHAS VISUAIS) ===== */
+/* ===== SVG AREA (PREENCHIMENTO TOTAL E FLUIDEZ) ===== */
 #bracket-wrap {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
-  /* Força isolamento de camada no mobile impedindo artefatos de renderização */
+  height: 100%;
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
   backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
   perspective: 1000;
 }
 #bracket-layer {
@@ -156,14 +155,16 @@ html, body {
   display: block;
   background: radial-gradient(circle at 50% 50%, #221a0b 0%, #0d0d0f 50%, #060607 100%);
   cursor: grab;
-  /* Gerencia atualizações constantes de forma suave na GPU */
-  will-change: contents;
 }
 #bracket-layer:active {
   cursor: grabbing;
 }
 
-/* ===== IMAGENS SVG (ESCUDOS) ===== */
+#zoom-container {
+  will-change: transform; /* Avisa a GPU sobre as alterações de escala e arrasto */
+}
+
+/* ===== IMAGENS SVG ===== */
 image {
   pointer-events: none;
   image-rendering: -webkit-optimize-contrast;
@@ -171,7 +172,7 @@ image {
   transform: translateZ(0);
 }
 
-/* ===== TOOLTIP (FLUTUANTE) ===== */
+/* ===== TOOLTIP FLUTUANTE ===== */
 #tooltip {
   position: absolute;
   padding: 12px 16px;
@@ -186,17 +187,13 @@ image {
   pointer-events: none;
   transform: translate3d(0, 0, 0);
   will-change: transform, opacity;
-  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.2s ease;
   opacity: 0;
   z-index: 100;
-  font-family: inherit;
   max-width: 220px;
 }
 #tooltip.visible {
   opacity: 1;
-}
-#tooltip strong {
-  color: #ffffff;
 }
 
 /* ===== BACKDROP DO PAINEL ===== */
@@ -209,7 +206,7 @@ body.panel-open::after {
   pointer-events: none;
 }
 
-/* ===== PANEL (NOVO LAYOUT INTEGRADO) ===== */
+/* ===== PANEL (LAYOUT PREMIUM INTEGRADO) ===== */
 #panel {
   position: fixed;
   top: 32px;
@@ -238,17 +235,13 @@ body.panel-open::after {
   pointer-events: auto;
 }
 
-/* Estrutura lado a lado dos times */
 .panel-teams-row {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
-  margin-top: 16px;
-  margin-bottom: 16px;
+  margin: 16px 0;
 }
-
-/* Colunas das seleções */
 .panel-team-column {
   flex: 1;
   display: flex;
@@ -256,8 +249,6 @@ body.panel-open::after {
   align-items: center;
   text-align: center;
 }
-
-/* Bloco superior com Escudo + Artilheiro Lado a Lado */
 .panel-visual-pair {
   display: flex;
   align-items: center;
@@ -279,15 +270,12 @@ body.panel-open::after {
   border: 1.5px solid #cc9a18;
   background: #141416;
 }
-
-/* Textos abaixo das imagens */
 .panel-team-name {
   font-weight: bold;
   font-size: 14px;
   color: #fff;
   line-height: 1.2;
   margin-bottom: 4px;
-  word-break: break-word;
 }
 .panel-scorer-info {
   font-size: 11px;
@@ -302,8 +290,6 @@ body.panel-open::after {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-/* Container do placar ou VS central */
 .panel-score-center {
   display: flex;
   flex-direction: column;
@@ -332,7 +318,7 @@ body.panel-open::after {
   bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(18, 18, 20, 0.6);
+  background: rgba(18, 18, 20, 0.7);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   padding: 8px 20px;
@@ -341,11 +327,9 @@ body.panel-open::after {
   color: #9ca3af;
   z-index: 50;
   border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
   gap: 4px;
-  white-space: nowrap;
 }
 #status button {
   background: none;
@@ -354,18 +338,15 @@ body.panel-open::after {
   cursor: pointer;
   font-weight: 700;
   margin-left: 8px;
-  font-size: 12px;
-  transition: color 0.2s ease;
   padding: 4px;
 }
 
-/* ===== OTIMIZAÇÃO MOBILE ===== */
+/* ===== MOBILE OTIMIZAÇÃO ===== */
 @media (max-width: 768px) {
   .banner-inner { padding: 8px 10px; gap: 8px; }
   .banner-match { font-size: 12px; gap: 6px; }
   .banner-flag { width: 20px; height: 20px; }
   .banner-score { font-size: 14px; padding: 3px 9px; }
-  .banner-match-text { font-size: 12px; }
 
   #panel {
     top: auto;
