@@ -1,5 +1,5 @@
 // ============================================================
-// BRACKET CIRCULAR – COPA DO MUNDO 2026 (VERSÃO HEADER DINÂMICO)
+// BRACKET CIRCULAR – COPA DO MUNDO 2026 (VERSÃO FINAL COMPLETA)
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -10,8 +10,6 @@ const tooltipEl = document.getElementById('tooltip');
 const panelEl = document.getElementById('panel');
 const statusText = document.getElementById('statusText');
 const refreshBtn = document.getElementById('refreshBtn');
-
-// Se você não tiver um container para o topo no HTML, crie um <div id="top-live-banner"></div> acima do seu SVG/Chaveamento
 const topBannerEl = document.getElementById('top-live-banner'); 
 
 // ---------- ESTADO GLOBAL ----------
@@ -22,7 +20,7 @@ const state = {
   selectedMatchId: null,
   updatedAt: null,
   loading: false,
-  highlightedMatchId: null // Armazena o ID da partida Ao Vivo ou Próxima para destacar no Bracket
+  highlightedMatchId: null // ID da partida Ao Vivo ou Próxima para brilhar no Bracket
 };
 
 // ---------- CONSTANTES GEOMÉTRICAS ----------
@@ -38,6 +36,7 @@ const TEAM_COLORS = {
   GER: '#d1d1d1', POR: '#991116', ESP: '#bd1117', USA: '#042247'
 };
 
+// ---------- ORDEM DOS SLOTS (BRACKET COPA) ----------
 const POSITION_ORDER = [
   'BEL', 'SEN', 'USA', 'BIH', 'ESP', 'AUT', 'POR', 'CRO',
   'RSA', 'CAN', 'NED', 'MAR', 'GER', 'PAR', 'FRA', 'SWE',
@@ -49,6 +48,7 @@ const INDEX_GEOMETRY_MAP = {};
 for(let i=0; i<16; i++) INDEX_GEOMETRY_MAP[i] = { side: 'left', pos: i };
 for(let i=16; i<32; i++) INDEX_GEOMETRY_MAP[i] = { side: 'right', pos: i - 16 };
 
+// ---------- CONSTRUTORES DO LAYOUT GEOMÉTRICO ----------
 function buildFixedLayout() {
   const totalLeaves = 32;
   const totalRounds = Math.log2(totalLeaves) + 1;
@@ -130,7 +130,11 @@ function mapApiToSlots() {
           if (pai1.team?.id === winner.id) { pai1.isWinner = true; pai2.isEliminated = true; }
           if (pai2.team?.id === winner.id) { pai2.isWinner = true; pai1.isEliminated = true; }
         } else {
-          slotFilho.team = match.home || match.away;
+          if (match.home && (pai1.team?.id === match.home.id || pai2.team?.id === match.home.id)) {
+            slotFilho.team = match.home;
+          } else if (match.away && (pai1.team?.id === match.away.id || pai2.team?.id === match.away.id)) {
+            slotFilho.team = match.away;
+          }
         }
         if (match.status === 'FINISHED' && winner && slotFilho.team?.id !== winner.id) {
           slotFilho.isEliminated = true;
@@ -145,7 +149,7 @@ function mapApiToSlots() {
 }
 
 // ============================================================
-// PROCESSA O HEADER SUPERIOR DA PÁGINA (AO VIVO OU PRÓXIMO JOGO)
+// HEADER SUPERIOR DA PÁGINA (CABEÇALHO DINÂMICO)
 // ============================================================
 function renderTopHeaderBanner() {
   if (!topBannerEl || state.rounds.length === 0) return;
@@ -163,24 +167,22 @@ function renderTopHeaderBanner() {
     }
   }
 
-  // Ordena os próximos jogos por data (o mais perto de acontecer vem primeiro)
   upcomingMatches.sort((a, b) => new Date(a.date) - new Date(b.date));
 
   let targetMatch = null;
   let isLive = false;
 
   if (liveMatches.length > 0) {
-    targetMatch = liveMatches[0]; // Prioridade 1: Jogo rolando agora
+    targetMatch = liveMatches[0];
     isLive = true;
   } else if (upcomingMatches.length > 0) {
-    targetMatch = upcomingMatches[0]; // Prioridade 2: Próximo jogo cronológico
+    targetMatch = upcomingMatches[0];
   }
 
-  // Salva o ID no estado global para o Bracket aplicar o brilho estético
   state.highlightedMatchId = targetMatch ? targetMatch.fixtureId : null;
 
   if (!targetMatch) {
-    topBannerEl.innerHTML = `<div style="text-align:center; color:#71717a; font-size:12px; padding:10px;">🏆 Todas as partidas agendadas foram encerradas!</div>`;
+    topBannerEl.innerHTML = `<div style="text-align:center; color:#71717a; font-size:12px; padding:12px; font-family:sans-serif;">🏆 Todas as partidas agendadas foram encerradas!</div>`;
     return;
   }
 
@@ -191,12 +193,14 @@ function renderTopHeaderBanner() {
 
   if (isLive) {
     topBannerEl.innerHTML = `
-      <div style="background: linear-gradient(90deg, #7f1d1d, #111); border-bottom: 2px solid #ef4444; padding: 10px 20px; display: flex; justify-content: center; align-items: center; gap: 20px; font-family: sans-serif;">
+      <div style="background: linear-gradient(90deg, #591010, #0c0c0e); border-bottom: 2px solid #ef4444; padding: 12px 20px; display: flex; justify-content: center; align-items: center; gap: 20px; font-family: sans-serif;">
         <span style="background: #ef4444; color: #fff; font-size: 10px; font-weight: bold; padding: 3px 8px; border-radius: 4px; animation: pulse 1.5s infinite;">🔴 AO VIVO</span>
-        <div style="display: flex; align-items: center; gap: 8px; color: #fff; font-weight: bold;">
-          ${homeCode ? `<img src="assets/img/federations/${homeCode}.svg" width="24" height="24" />` : ''} <span>${home}</span>
-          <span style="background: #222; padding: 4px 12px; border-radius: 4px; font-size: 16px; color: #cc9a18; margin: 0 10px;">${targetMatch.score?.home ?? 0} × ${targetMatch.score?.away ?? 0}</span>
-          <span>${away}</span> ${awayCode ? `<img src="assets/img/federations/${awayCode}.svg" width="24" height="24" />` : ''}
+        <div style="display: flex; align-items: center; gap: 12px; color: #fff; font-weight: bold; font-size: 14px;">
+          ${homeCode ? `<img src="assets/img/federations/${homeCode}.svg" width="26" height="26" onerror="this.style.display='none'" />` : ''} 
+          <span>${home}</span>
+          <span style="background: #18181b; border: 1px solid #2d2d34; padding: 4px 14px; border-radius: 4px; font-size: 18px; color: #cc9a18; margin: 0 10px; font-weight:900;">${targetMatch.score?.home ?? 0} × ${targetMatch.score?.away ?? 0}</span>
+          <span>${away}</span> 
+          ${awayCode ? `<img src="assets/img/federations/${awayCode}.svg" width="26" height="26" onerror="this.style.display='none'" />` : ''}
         </div>
       </div>`;
   } else {
@@ -205,23 +209,134 @@ function renderTopHeaderBanner() {
     const timeStr = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
     topBannerEl.innerHTML = `
-      <div style="background: #0b0b0d; border-bottom: 1px solid #cc9a18; padding: 10px 20px; display: flex; justify-content: center; align-items: center; gap: 15px; font-family: sans-serif;">
-        <span style="color: #cc9a18; font-size: 11px; font-weight: bold; border: 1px solid #cc9a18; padding: 2px 6px; border-radius: 4px;">📅 PRÓXIMO JOGO</span>
+      <div style="background: #09090b; border-bottom: 1px solid #cc9a18; padding: 12px 20px; display: flex; justify-content: center; align-items: center; gap: 15px; font-family: sans-serif;">
+        <span style="color: #cc9a18; font-size: 10px; font-weight: bold; border: 1px solid #cc9a18; padding: 2px 6px; border-radius: 4px; letter-spacing:0.5px;">📅 PRÓXIMO JOGO</span>
         <div style="color: #e4e4e7; font-size: 13px; font-weight: 500;">
-          <strong>${home}</strong> vs <strong>${away}</strong> <span style="color: #a1a1aa; margin-left: 10px;">(${dateStr} às ${timeStr})</span>
+          <strong>${home}</strong> vs <strong>${away}</strong> <span style="color: #cc9a18; font-weight:bold; margin-left: 10px;">(${dateStr} às ${timeStr})</span>
         </div>
       </div>`;
   }
 }
 
 // ============================================================
-// RENDERIZAÇÃO DO BRACKET
+// PAINEL INTERATIVO LATERAL / CENTRAL (CLIQUE NO NÓ)
+// ============================================================
+function renderInteractivePanel() {
+  if (!panelEl || !state.selectedMatchId) return;
+
+  let match = null;
+  for (const round of state.rounds) {
+    const found = round.matches?.find((m) => m.fixtureId === state.selectedMatchId);
+    if (found) { match = found; break; }
+  }
+
+  if (!match) return;
+
+  const homeName = match.home?.name || 'A definir';
+  const awayName = match.away?.name || 'A definir';
+  const homeCode = match.home?.code?.toUpperCase();
+  const awayCode = match.away?.code?.toUpperCase();
+  const stage = match.stage || 'Copa do Mundo';
+
+  const homeScorer = match.home?.topScorer;
+  const awayScorer = match.away?.topScorer;
+
+  let panelHeaderHtml = '';
+  const isLive = ['IN_PLAY', 'LIVE', 'PAUSED'].includes(match.status);
+
+  if (isLive) {
+    panelHeaderHtml = `
+      <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 16px;">
+        <div style="font-size: 11px; color: #ef4444; font-weight: bold; letter-spacing: 1px;">🔴 AO VIVO</div>
+      </div>`;
+  } else if (match.status === 'FINISHED') {
+    panelHeaderHtml = `
+      <div style="background: #09090b; border: 1px solid #1c1c1f; border-radius: 8px; padding: 6px; text-align: center; margin-bottom: 16px;">
+        <div style="font-size: 10px; color: #71717a; font-weight: bold;">✅ PARTIDA ENCERRADA</div>
+      </div>`;
+  } else if (match.date) {
+    const dateObj = new Date(match.date);
+    const dateStr = dateObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    const timeStr = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    
+    panelHeaderHtml = `
+      <div style="background: rgba(204, 154, 24, 0.08); border: 1px solid #cc9a18; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 16px;">
+        <div style="font-size: 10px; color: #cc9a18; font-weight: bold;">📅 DATA E HORA DO CONFRONTO</div>
+        <div style="font-size: 15px; font-weight: bold; color: #fff; margin-top: 4px;">${dateStr} às ${timeStr}</div>
+      </div>`;
+  }
+
+  let contentHtml = `
+    <div style="position: relative; padding: 12px; font-family: sans-serif;">
+      <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #a1a1aa; font-weight: bold; margin-bottom: 10px; text-align: center;">🏆 ${stage}</div>
+      
+      ${panelHeaderHtml}
+      
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; background: #070708; padding: 12px 8px; border-radius: 8px; border: 1px solid #121215;">
+        <div style="text-align: center; flex: 1;">
+          ${homeCode && match.home?.name !== 'TBD' 
+            ? `<img src="assets/img/federations/${homeCode}.svg" width="44" height="44" onerror="this.style.opacity='0.3'" style="margin-bottom:6px; display:block; margin-left:auto; margin-right:auto;" />` 
+            : `<div style="font-size:24px; margin-bottom:6px;">❓</div>`
+          }
+          <div style="font-weight: bold; font-size: 13px; color: #fff; line-height: 1.2;">${homeName}</div>
+        </div>
+        
+        <div style="padding: 0 6px; text-align: center; min-width: 65px;">
+          ${match.status === 'FINISHED' || isLive
+            ? `<div style="font-size: 22px; font-weight: 900; color: ${isLive ? '#ef4444' : '#cc9a18'};">${match.score?.home ?? 0}-${match.score?.away ?? 0}</div>`
+            : `<div style="font-size: 12px; font-weight: bold; background: #1a1a1e; padding: 4px 10px; border-radius: 4px; color: #71717a;">VS</div>`
+          }
+        </div>
+
+        <div style="text-align: center; flex: 1;">
+          ${awayCode && match.away?.name !== 'TBD' 
+            ? `<img src="assets/img/federations/${awayCode}.svg" width="44" height="44" onerror="this.style.opacity='0.3'" style="margin-bottom:6px; display:block; margin-left:auto; margin-right:auto;" />` 
+            : `<div style="font-size:24px; margin-bottom:6px;">❓</div>`
+          }
+          <div style="font-weight: bold; font-size: 13px; color: #fff; line-height: 1.2;">${awayName}</div>
+        </div>
+      </div>
+  `;
+
+  if (match.status === 'FINISHED') {
+    contentHtml += `
+      <div style="border-top: 1px solid #1f1f23; padding-top: 12px;">
+        <div style="font-size: 12px; font-weight: bold; color: #e4e4e7; margin-bottom: 8px; text-align: center;">🎯 Artilheiro e Gols</div>
+        <div style="display: flex; gap: 8px; justify-content: space-around;">
+    `;
+
+    [{ code: homeCode, data: homeScorer }, { code: awayCode, data: awayScorer }].forEach(sc => {
+      if (sc.code && sc.code !== 'TBD') {
+        const name = sc.data ? sc.data.name : 'Sem gols anotados';
+        const goals = sc.data ? `${sc.data.goals} Gols` : '0';
+        
+        contentHtml += `
+          <div style="text-align: center; background: #09090b; border: 1px solid #1c1c1f; padding: 8px 6px; border-radius: 6px; width: 46%;">
+            <img src="assets/img/art/${sc.code}.png" width="42" height="42" style="border-radius: 50%; object-fit: cover; border: 1px solid #cc9a18; background:#141416; margin-bottom: 4px;" 
+              onerror="this.src='https://flagcdn.com/${sc.code.toLowerCase().substring(0,2)}.svg'; this.style.borderRadius='4px';" />
+            <div style="font-size: 11px; font-weight: bold; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${name}">${name}</div>
+            <div style="font-size: 10px; color: #cc9a18; font-weight: bold; margin-top: 2px;">⚽ ${goals}</div>
+          </div>`;
+      }
+    });
+
+    contentHtml += `</div></div>`;
+  }
+
+  contentHtml += `</div>`;
+  panelEl.innerHTML = contentHtml;
+  panelEl.classList.add('visible');
+}
+
+// ============================================================
+// RENDERIZAÇÃO GRÁFICA DO SVG (BRACKET CIRCULAR)
 // ============================================================
 function render() {
   if (!svgLayer) return;
   clearSVG();
 
   const layout = mapApiToSlots();
+
   drawBackground();
   drawFixedConnections(layout);
 
@@ -230,9 +345,8 @@ function render() {
       drawNode(slot);
     }
   }
+
   drawTrophy();
-  
-  // Atualiza o Banner Superior da Página
   renderTopHeaderBanner();
 }
 
@@ -246,18 +360,15 @@ function drawNode(slot) {
   const hasActiveTeam = team && team.code && team.code !== 'TBD';
   const nodeRadius = hasActiveTeam && !isEliminated ? 17 : 14;
 
-  // LÓGICA DE DESTAQUE: Verifica se o nó pertence à partida ativa em evidência no topo
   const isMatchHighlighted = matchId && matchId === state.highlightedMatchId;
 
   const nodeFill = isEliminated ? COLOR_INACTIVE_NODE : '#060608';
   let nodeStroke = isEliminated ? '#1f1f23' : (hasActiveTeam && !isEliminated ? '#cc9a18' : '#35353c');
   let nodeStrokeWidth = hasActiveTeam && !isEliminated ? 2.2 : 1;
 
-  // Se for o jogo em destaque, força uma borda mais grossa/viva (e classe CSS pulsante se desejar)
   if (isMatchHighlighted) {
-    nodeStroke = '#ef4444'; // Borda vermelha chamativa para o jogo do topo
+    g.setAttribute('class', 'highlighted-node-pulse');
     nodeStrokeWidth = 3.5;
-    g.setAttribute('class', 'highlighted-node-pulse'); 
   }
 
   g.appendChild(elNS('circle', { cx: x, cy: y, r: nodeRadius, fill: nodeFill, stroke: nodeStroke, 'stroke-width': nodeStrokeWidth }));
@@ -266,7 +377,10 @@ function drawNode(slot) {
     const countryCodeUpper = team.code.toUpperCase();
     const countryCodeLower = team.code.toLowerCase();
     
-    const isoMap = { bra: 'br', fra: 'fr', ger: 'de', esp: 'es', arg: 'ar', can: 'ca', mex: 'mx', usa: 'us', eng: 'gb-eng', nor: 'no', por: 'pt' };
+    const isoMap = {
+      bra: 'br', fra: 'fr', ger: 'de', esp: 'es', arg: 'ar', can: 'ca', mex: 'mx', usa: 'us',
+      eng: 'gb-eng', nor: 'no', por: 'pt', ita: 'it', jpn: 'jp', mar: 'ma', sui: 'ch', egy: 'eg'
+    };
     const flag2Letter = isoMap[countryCodeLower] || countryCodeLower.substring(0, 2);
     
     const clipId = `clip-r${round}-n${slot.index}-${countryCodeLower}`;
@@ -280,32 +394,174 @@ function drawNode(slot) {
       preserveAspectRatio: 'xMidYMid slice', 'clip-path': `url(#${clipId})`,
       style: isEliminated ? 'filter: grayscale(1) opacity(0.18);' : ''
     }));
+
+    if (round === 0) {
+      const shieldDistance = radius + 26; 
+      const [sx, sy] = polar(shieldDistance, angle);
+      const shieldSize = 22; 
+
+      const imgFederation = elNS('image', {
+        x: sx - shieldSize / 2, y: sy - shieldSize / 2,
+        width: shieldSize, height: shieldSize, href: `assets/img/federations/${countryCodeUpper}.svg`, 
+        style: isEliminated ? 'filter: grayscale(1) opacity(0.12);' : ''
+      });
+
+      imgFederation.onerror = () => imgFederation.remove();
+      svgLayer.appendChild(imgFederation);
+      
+      const [lx, ly] = polar(radius + 14, angle);
+      svgLayer.appendChild(elNS('line', {
+        x1: lx, y1: ly, x2: sx, y2: sy,
+        stroke: isEliminated ? '#1c1c20' : '#2d2d34', 'stroke-width': 1, 'stroke-dasharray': '2,2'
+      }));
+    }
+  } else {
+    const t = elNS('text', { x, y: y + 3, 'text-anchor': 'middle', 'font-size': 7, fill: '#28282d', 'font-weight': 'bold', 'font-family': 'sans-serif' });
+    t.textContent = 'TBD';
+    g.appendChild(t);
   }
 
-  g.onclick = () => { if (matchId) { state.selectedMatchId = matchId; renderInteractivePanel(); } };
+  g.onmouseenter = (e) => {
+    const rect = svgLayer.getBoundingClientRect();
+    state.hover = { x: e.clientX - rect.left, y: e.clientY - rect.top, matchId };
+    renderTooltipOnly();
+  };
+  g.onmouseleave = () => { state.hover = null; renderTooltipOnly(); };
+
+  g.onclick = () => {
+    if (matchId) {
+      state.selectedMatchId = matchId;
+      renderInteractivePanel();
+    }
+  };
+
   svgLayer.appendChild(g);
 }
 
-// O restante dos métodos auxiliares (drawFixedConnections, polar, elNS, drawTrophy, load, etc.) permanecem inalterados...
+function drawFixedConnections(layout) {
+  for (let r = 0; r < layout.length - 1; r++) {
+    const currentLayer = layout[r];
+    const nextLayer = layout[r + 1];
+    if (!currentLayer || !nextLayer) continue;
+
+    const rMid = (LEVEL_R[r] + LEVEL_R[r + 1]) / 2;
+
+    for (let i = 0; i < currentLayer.length; i += 2) {
+      const parent1 = currentLayer[i];
+      const parent2 = currentLayer[i + 1];
+      const child = nextLayer[Math.floor(i / 2)];
+
+      if (!parent1 || !parent2 || !child) continue;
+
+      const color1 = (parent1.isWinner && parent1.team && !parent1.isEliminated) ? (TEAM_COLORS[parent1.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
+      const width1 = (parent1.isWinner && parent1.team && !parent1.isEliminated) ? 2.5 : 1.2;
+
+      const color2 = (parent2.isWinner && parent2.team && !parent2.isEliminated) ? (TEAM_COLORS[parent2.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
+      const width2 = (parent2.isWinner && parent2.team && !parent2.isEliminated) ? 2.5 : 1.2;
+
+      const jointColor = (child.team && !child.isEliminated) ? (TEAM_COLORS[child.team?.code?.toUpperCase()] || '#cda036') : COLOR_INACTIVE_LINE;
+      const jointWidth = (child.team && !child.isEliminated) ? 2.5 : 1.2;
+
+      drawSeparatedBezierConnection(
+        parent1.radius, parent1.angle, color1, width1,
+        parent2.radius, parent2.angle, color2, width2,
+        rMid, child.angle, child.radius, jointColor, jointWidth
+      );
+    }
+  }
+}
+
+function drawSeparatedBezierConnection(r1, angleA, col1, w1, r2, angleB, col2, w2, rMid, childAngle, rChild, colJ, wJ) {
+  const [x1, y1] = polar(r1, angleA);
+  const [x2, y2] = polar(r1, angleB);
+  const [cx, cy] = polar(rMid, childAngle);
+  const [cx2, cy2] = polar(rChild, childAngle);
+
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2;
+
+  svgLayer.appendChild(elNS('path', { d: `M${x1},${y1} Q${midX},${midY} ${cx},${cy}`, stroke: col1, fill: 'none', 'stroke-width': w1 }));
+  svgLayer.appendChild(elNS('path', { d: `M${cx},${cy} Q${midX},${midY} ${x2},${y2}`, stroke: col2, fill: 'none', 'stroke-width': w2 }));
+  svgLayer.appendChild(elNS('path', { d: `M${cx},${cy} L${cx2},${cy2}`, stroke: colJ, fill: 'none', 'stroke-width': wJ }));
+}
+
+function renderTooltipOnly() {
+  if (!tooltipEl) return;
+  const hover = state.hover;
+  if (!hover) { tooltipEl.classList.remove('visible'); return; }
+
+  let match = null;
+  for (const round of state.rounds) {
+    const found = round.matches?.find((m) => m.fixtureId === hover.matchId);
+    if (found) { match = found; break; }
+  }
+  if (!match) { tooltipEl.classList.remove('visible'); return; }
+
+  const home = match.home?.name || 'TBD';
+  const away = match.away?.name || 'TBD';
+  const score = match.status === 'FINISHED' ? `${match.score?.home ?? 0} – ${match.score?.away ?? 0}` : 'A Jogar';
+
+  tooltipEl.innerHTML = `<div><strong>${home}</strong> vs <strong>${away}</strong></div><div style="font-size:11px;color:#cc9a18;margin-top:2px;">${score}</div>`;
+  tooltipEl.style.transform = `translate3d(${hover.x + 16}px, ${hover.y + 16}px, 0)`;
+  tooltipEl.classList.add('visible');
+}
+
 function polar(r, a) { return [CX + r * Math.sin(a), CY - r * Math.cos(a)]; }
+
 function elNS(tag, attrs = {}) {
   const el = document.createElementNS(NS, tag);
   for (const k in attrs) el.setAttribute(k, attrs[k]);
   return el;
 }
-function clearSVG() { while (svgLayer.firstChild) svgLayer.removeChild(svgLayer.firstChild); }
-function drawBackground() {
-  svgLayer.appendChild(elNS('rect', { x: 0, y: 0, width: 1200, height: 1000, fill: '#050506' }));
-}
-function drawTrophy() {}
-function drawFixedConnections(l){}
 
+function clearSVG() { while (svgLayer.firstChild) svgLayer.removeChild(svgLayer.firstChild); }
+
+function drawBackground() {
+  const defs = elNS('defs', { id: 'defs' });
+  const grad = elNS('radialGradient', { id: 'bgGlow', cx: '50%', cy: '50%', r: '55%' });
+  grad.appendChild(elNS('stop', { offset: '0%', 'stop-color': '#110f0c' }));
+  grad.appendChild(elNS('stop', { offset: '70%', 'stop-color': '#050506' }));
+  grad.appendChild(elNS('stop', { offset: '100%', 'stop-color': '#010102' }));
+  defs.appendChild(grad);
+  svgLayer.appendChild(defs);
+  svgLayer.appendChild(elNS('rect', { x: 0, y: 0, width: 1200, height: 1000, fill: 'url(#bgGlow)' }));
+
+  LEVEL_R.forEach((r) => {
+    svgLayer.appendChild(elNS('circle', { cx: CX, cy: CY, r, fill: 'none', stroke: '#0a0a0c', 'stroke-width': 1 }));
+  });
+}
+
+function drawTrophy() {
+  const g = elNS('g');
+  g.appendChild(elNS('circle', { cx: CX, cy: CY, r: 52, fill: '#010102', stroke: '#18140b', 'stroke-width': 1.5 }));
+  g.appendChild(elNS('image', {
+    x: CX - 37, y: CY - 37, width: 74, height: 74,
+    href: 'taca.gif', preserveAspectRatio: 'xMidYMid meet'
+  }));
+  svgLayer.appendChild(g);
+}
+
+// ---------- SINKRONIZAÇÃO COM A API ----------
 async function load() {
+  state.loading = true;
+  if (statusText) statusText.textContent = 'Atualizando...';
   try {
     const res = await fetch('/api/bracket', { cache: 'no-store' });
     const data = await res.json();
     state.rounds = data.rounds || [];
+    state.leaves = data.leaves || [];
+    state.updatedAt = data.updatedAt || null;
+    
     render();
-  } catch (e) { console.error(e); }
+    if (state.selectedMatchId) renderInteractivePanel();
+    if (statusText) statusText.textContent = '✓ Sincronizado';
+  } catch (e) {
+    if (statusText) statusText.textContent = '❌ Erro de Conexão';
+  } finally {
+    state.loading = false;
+  }
 }
+
+if (refreshBtn) refreshBtn.addEventListener('click', load);
 load();
+setInterval(load, 60000); // Polling automático a cada 1 minuto
