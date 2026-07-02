@@ -401,10 +401,24 @@ function drawNode(slot) {
     const countryCodeUpper = team.code.toUpperCase();
     const countryCodeLower = team.code.toLowerCase();
 
-    const isoMap = {
-      bra: 'br', fra: 'fr', ger: 'de', esp: 'es', arg: 'ar', can: 'ca', mex: 'mx', usa: 'us',
-      eng: 'gb-eng', nor: 'no', por: 'pt', ita: 'it', jpn: 'jp', mar: 'ma', sui: 'ch', egy: 'eg'
+       const isoMap = {
+      // --- Américas ---
+      bra: 'br', arg: 'ar', col: 'co', ecu: 'ec', par: 'py',
+      mex: 'mx', usa: 'us', can: 'ca',
+
+      // --- Europa ---
+      eng: 'gb-eng', esp: 'es', por: 'pt', fra: 'fr', ger: 'de',
+      ned: 'nl',     aut: 'at', swe: 'se', cro: 'hr', bih: 'ba', 
+      sui: 'ch',     nor: 'no', bel: 'be',
+
+      // --- África ---
+      sen: 'sn', mar: 'ma', rsa: 'za', egy: 'eg', 
+      gha: 'gh', alg: 'dz', cpv: 'cv', cod: 'cd',
+
+      // --- Ásia e Oceania ---
+      jpn: 'jp', aus: 'au'
     };
+
     const flag2Letter = isoMap[countryCodeLower] || countryCodeLower.substring(0, 2);
 
     // CORREÇÃO MESTRA: Uso de Timestamp temporal único para invalidar cache de GPU de mobile
