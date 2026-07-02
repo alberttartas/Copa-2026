@@ -13,7 +13,6 @@ html, body {
   height: 100%;
   margin: 0;
   -webkit-font-smoothing: antialiased;
-  /* evita bounce/zoom acidental em touch */
   overscroll-behavior: none;
   touch-action: manipulation;
 }
@@ -51,7 +50,7 @@ html, body {
   position: relative;
   width: 100vw;
   height: 100vh;
-  height: 100dvh; /* altura real em navegadores mobile, sem barra de endereço cortando */
+  height: 100dvh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -135,12 +134,18 @@ html, body {
   margin-left: 8px;
 }
 
-/* ===== SVG LAYER ===== */
+/* ===== SVG LAYER (SOLUÇÃO DE FALHAS VISUAIS) ===== */
 #bracket-wrap {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
+  /* Força isolamento de camada no mobile impedindo artefatos de renderização */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  perspective: 1000;
 }
 #bracket-layer {
   position: absolute;
@@ -149,9 +154,10 @@ html, body {
   width: 100%;
   height: 100%;
   display: block;
-  /* Brilho dourado/radial centralizado dramático imitando o mockup */
   background: radial-gradient(circle at 50% 50%, #221a0b 0%, #0d0d0f 50%, #060607 100%);
   cursor: grab;
+  /* Gerencia atualizações constantes de forma suave na GPU */
+  will-change: contents;
 }
 #bracket-layer:active {
   cursor: grabbing;
@@ -159,17 +165,20 @@ html, body {
 
 /* ===== IMAGENS SVG (ESCUDOS) ===== */
 image {
-  pointer-events: none; /* Garante que o hover capture o grupo <g> do nó, não a imagem isolada */
+  pointer-events: none;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  transform: translateZ(0);
 }
 
-/* ===== TOOLTIP (MODERNO E FLUTUANTE) ===== */
+/* ===== TOOLTIP (FLUTUANTE) ===== */
 #tooltip {
   position: absolute;
   padding: 12px 16px;
   background: rgba(11, 11, 13, 0.92);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(217, 165, 49, 0.2); /* Sutil borda dourada */
+  border: 1px solid rgba(217, 165, 49, 0.2);
   border-radius: 12px;
   font-size: 13px;
   color: #f3f4f6;
@@ -189,25 +198,8 @@ image {
 #tooltip strong {
   color: #ffffff;
 }
-#tooltip .score {
-  color: #d9a531;
-  font-weight: 800;
-  font-size: 18px;
-  margin: 4px 0;
-  letter-spacing: 0.5px;
-}
-#tooltip .detail {
-  color: #9ca3af;
-  font-size: 11px;
-  margin-top: 4px;
-}
-#tooltip .detail.live {
-  color: #ef4444;
-  font-weight: 600;
-  animation: pulse 1.2s infinite;
-}
 
-/* ===== BACKDROP DO PAINEL (SÓ ATIVO NO MOBILE) ===== */
+/* ===== BACKDROP DO PAINEL ===== */
 body.panel-open::after {
   content: '';
   position: fixed;
@@ -217,62 +209,124 @@ body.panel-open::after {
   pointer-events: none;
 }
 
-/* ===== PANEL (LATERAL FIXO PREMIUM) ===== */
+/* ===== PANEL (NOVO LAYOUT INTEGRADO) ===== */
 #panel {
   position: fixed;
   top: 32px;
   right: 32px;
-  width: 300px;
+  width: 320px;
   max-width: calc(100vw - 24px);
   max-height: calc(100vh - 64px);
   overflow-y: auto;
-  background: rgba(11, 11, 13, 0.9);
+  background: rgba(11, 11, 13, 0.95);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 16px;
-  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 16px 12px;
   color: #f3f4f6;
   pointer-events: none;
   z-index: 99;
   opacity: 0;
   transform: translateX(20px);
   transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: -10px 10px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: -10px 10px 40px rgba(0, 0, 0, 0.6);
 }
 #panel.visible {
   opacity: 1;
   transform: translateX(0);
   pointer-events: auto;
 }
-#panel .match-title {
-  font-weight: 700;
-  font-size: 16px;
-  letter-spacing: -0.3px;
-  color: #ffffff;
-}
-#panel .match-score {
-  color: #d9a531;
-  font-weight: 800;
-  font-size: 24px;
-  margin: 8px 0;
-  letter-spacing: 1px;
-}
-#panel .match-detail {
-  color: #9ca3af;
-  font-size: 12px;
-  margin-top: 2px;
-}
-#panel .match-detail strong {
-  text-shadow: 0 0 10px rgba(217, 165, 49, 0.4);
-}
-#panel .match-detail.live {
-  color: #ef4444;
-  font-weight: 700;
-  animation: pulse 1.2s infinite;
+
+/* Estrutura lado a lado dos times */
+.panel-teams-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 16px;
+  margin-bottom: 16px;
 }
 
-/* ===== STATUS & BOTÃO REFRESH ===== */
+/* Colunas das seleções */
+.panel-team-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+/* Bloco superior com Escudo + Artilheiro Lado a Lado */
+.panel-visual-pair {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  width: 100%;
+}
+.panel-visual-pair img.badge {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+.panel-visual-pair img.scorer-photo {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid #cc9a18;
+  background: #141416;
+}
+
+/* Textos abaixo das imagens */
+.panel-team-name {
+  font-weight: bold;
+  font-size: 14px;
+  color: #fff;
+  line-height: 1.2;
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+.panel-scorer-info {
+  font-size: 11px;
+  color: #cc9a18;
+  font-weight: 600;
+}
+.panel-scorer-name {
+  color: #a1a1aa;
+  font-size: 11px;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Container do placar ou VS central */
+.panel-score-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 70px;
+  align-self: center;
+}
+.panel-big-score {
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+.panel-vs-badge {
+  font-size: 12px;
+  font-weight: bold;
+  background: #1a1a1e;
+  padding: 4px 10px;
+  border-radius: 4px;
+  color: #71717a;
+}
+
+/* ===== STATUS & REFRESH ===== */
 #status {
   position: absolute;
   bottom: 16px;
@@ -301,44 +355,18 @@ body.panel-open::after {
   font-weight: 700;
   margin-left: 8px;
   font-size: 12px;
-  transition: color 0.2s ease, text-shadow 0.2s ease;
+  transition: color 0.2s ease;
   padding: 4px;
 }
-#status button:hover {
-  color: #f0c23d;
-  text-shadow: 0 0 8px rgba(240, 194, 61, 0.5);
-}
 
-/* ============================================================
-   OTIMIZAÇÃO MOBILE
-   ============================================================ */
-
-/* Tablets e celulares grandes */
+/* ===== OTIMIZAÇÃO MOBILE ===== */
 @media (max-width: 768px) {
-  .banner-inner {
-    padding: 8px 10px;
-    gap: 8px;
-  }
-  .banner-match {
-    font-size: 12px;
-    gap: 6px;
-  }
-  .banner-flag {
-    width: 20px;
-    height: 20px;
-  }
-  .banner-score {
-    font-size: 14px;
-    padding: 3px 9px;
-  }
-  .banner-match-text {
-    font-size: 12px;
-  }
-  .banner-tag {
-    font-size: 9px;
-  }
+  .banner-inner { padding: 8px 10px; gap: 8px; }
+  .banner-match { font-size: 12px; gap: 6px; }
+  .banner-flag { width: 20px; height: 20px; }
+  .banner-score { font-size: 14px; padding: 3px 9px; }
+  .banner-match-text { font-size: 12px; }
 
-  /* O painel vira uma folha inferior (bottom sheet) em vez de flutuar à direita */
   #panel {
     top: auto;
     bottom: 0;
@@ -346,55 +374,13 @@ body.panel-open::after {
     left: 0;
     width: 100%;
     max-width: 100%;
-    max-height: 70vh;
-    border-radius: 18px 18px 0 0;
+    max-height: 75vh;
+    border-radius: 24px 24px 0 0;
     transform: translateY(100%);
-    padding: 6px;
+    padding: 16px 12px 32px 12px;
   }
-  #panel.visible {
-    transform: translateY(0);
-  }
-
-  /* Escurece o fundo quando o painel de detalhes está aberto */
-  body.panel-open::after {
-    background: rgba(0, 0, 0, 0.55);
-    pointer-events: auto;
-  }
-
-  #status {
-    bottom: 10px;
-    font-size: 11px;
-    padding: 6px 14px;
-  }
-
-  #tooltip {
-    display: none; /* hover não existe em touch; os detalhes já abrem pelo toque no nó */
-  }
-}
-
-/* Celulares pequenos */
-@media (max-width: 420px) {
-  .banner-match {
-    font-size: 11px;
-  }
-  .banner-score {
-    font-size: 13px;
-    padding: 2px 8px;
-  }
-  #status {
-    font-size: 10px;
-    padding: 5px 12px;
-  }
-}
-
-/* Tela curta (paisagem em celular) — reduz banner e status para sobrar espaço pro bracket */
-@media (max-height: 480px) {
-  .banner-inner {
-    padding: 4px 10px;
-  }
-  #status {
-    bottom: 6px;
-    padding: 4px 10px;
-    font-size: 10px;
-  }
+  #panel.visible { transform: translateY(0); }
+  body.panel-open::after { background: rgba(0, 0, 0, 0.6); pointer-events: auto; }
+  #status { bottom: 10px; }
+  #tooltip { display: none; }
 }
