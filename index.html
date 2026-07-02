@@ -2,24 +2,23 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
   <title>Copa 2026 – Bracket Circular</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-
 <div id="app">
-  <svg id="bracket-layer" viewBox="0 0 1200 1000"></svg>
-
+  <div id="top-live-banner"></div>
+  <div id="bracket-wrap">
+    <svg id="bracket-layer" viewBox="0 0 1200 1000" preserveAspectRatio="xMidYMid meet"></svg>
+  </div>
   <div id="tooltip"></div>
   <div id="panel"></div>
-
   <div id="status">
     <span id="statusText">Carregando…</span>
     <button id="refreshBtn">↻ Atualizar</button>
   </div>
 </div>
-
 <script type="module" src="script.js"></script>
 </body>
 </html>
