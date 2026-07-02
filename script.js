@@ -1,5 +1,5 @@
 // ============================================================
-// BRACKET CIRCULAR INTERATIVO COM ZOOM INTELIGENTE
+// BRACKET CIRCULAR INTERATIVO COM ZOOM INTELIGENTE (CORRIGIDO)
 // ============================================================
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -25,7 +25,7 @@ const state = {
   highlightedIsLive: false
 };
 
-// ---------- TRANSLATION MAPS & ISO FALBACKS ----------
+// ---------- MAPAS DE TRADUÇÃO E SELEÇÕES ----------
 const TRANSLATED_TEAMS = {
   'BEL': 'Bélgica', 'SEN': 'Senegal', 'USA': 'Estados Unidos', 'BIH': 'Bósnia',
   'ESP': 'Espanha', 'AUT': 'Áustria', 'POR': 'Portugal', 'CRO': 'Croácia',
@@ -57,43 +57,54 @@ function getFlag2Letter(code) {
   return ISO_MAP[lower] || lower.substring(0, 2);
 }
 
-// ---------- INSTANCIAÇÃO E CONFIGURAÇÃO DO D3 ZOOM ----------
-const svgSelection = d3.select('#bracket-layer');
-const containerSelection = d3.select('#zoom-container');
+// ---------- INSTANCIAÇÃO SEGURA DO D3 ZOOM ----------
+let zoomBehavior = null;
+let svgSelection = null;
+let containerSelection = null;
 
-const zoomBehavior = d3.zoom()
-  .scaleExtent([0.5, 5]) // Limites de zoom: out de 0.5x até in de 5x
-  .on('zoom', (event) => {
-    containerSelection.attr('transform', event.transform);
-  });
+function initZoomSystem() {
+  if (typeof d3 === 'undefined') return; // Evita quebra se a CDN falhar momentaneamente
 
-svgSelection.call(zoomBehavior);
+  svgSelection = d3.select('#bracket-layer');
+  containerSelection = d3.select('#zoom-container');
 
-// Centraliza o círculo inicialmente
-function centerBracketInitially() {
-  const width = svgElement.clientWidth || 1200;
-  const height = svgElement.clientHeight || 1000;
-  
-  // Define o ponto central ideal baseado no viewport real do dispositivo
-  const initialTransform = d3.zoomIdentity
-    .translate(width / 2 - 600 * 0.75, height / 2 - 500 * 0.75)
-    .scale(0.75);
+  zoomBehavior = d3.zoom()
+    .scaleExtent([0.4, 5])
+    .on('zoom', (event) => {
+      containerSelection.attr('transform', event.transform);
+    });
 
-  svgSelection.call(zoomBehavior.transform, initialTransform);
+  svgSelection.call(zoomBehavior);
 }
 
-// Executa o zoom suave focando no nó clicado
-function zoomToNode(x, y) {
-  const width = svgElement.clientWidth || 1200;
-  const height = svgElement.clientHeight || 1000;
+function centerBracketInitially() {
+  if (!zoomBehavior || !svgSelection) return;
   
-  const nextScale = window.innerWidth < 768 ? 2.2 : 1.6; // Zoom mais forte em aparelhos mobile
+  // Aguarda um frame do navegador para medir o tamanho exato da tela mobile
+  setTimeout(() => {
+    const width = svgElement.clientWidth || window.innerWidth;
+    const height = svgElement.clientHeight || window.innerHeight;
+    
+    const initialTransform = d3.zoomIdentity
+      .translate(width / 2 - 600 * 0.72, height / 2 - 500 * 0.72)
+      .scale(0.72);
+
+    svgSelection.call(zoomBehavior.transform, initialTransform);
+  }, 50);
+}
+
+function zoomToNode(x, y) {
+  if (!zoomBehavior || !svgSelection) return;
+  const width = svgElement.clientWidth || window.innerWidth;
+  const height = svgElement.clientHeight || window.innerHeight;
+  
+  const nextScale = window.innerWidth < 768 ? 2.0 : 1.5;
   const transform = d3.zoomIdentity
     .translate(width / 2 - x * nextScale, height / 2 - y * nextScale)
     .scale(nextScale);
 
   svgSelection.transition()
-    .duration(750)
+    .duration(700)
     .ease(d3.easeCubicOut)
     .call(zoomBehavior.transform, transform);
 }
@@ -238,7 +249,7 @@ function findLiveOrNextMatch() {
   return { match: null, isLive: false };
 }
 
-// ---------- RENDERS DO CABEÇALHO E DOS DETALHES ----------
+// ---------- RENDERS DO BANNER E DO PAINEL ----------
 function renderTopHeaderBanner(targetMatch, isLive) {
   if (!topBannerEl) return;
   if (!targetMatch) {
@@ -404,9 +415,8 @@ function drawNode(slot) {
   };
   g.onmouseleave = () => { state.hover = null; renderTooltipOnly(); };
 
-  // DISPARADOR DE TOQUE: Foca no nó centralizando-o e abrindo o painel lateral
   g.onclick = () => {
-    zoomToNode(x, y); // Executa o Zoom Nativo Dinâmico
+    zoomToNode(x, y);
     if (matchId) {
       state.hover = null; renderTooltipOnly();
       state.selectedMatchId = matchId;
@@ -464,7 +474,10 @@ function elNS(tag, attrs = {}) {
   for (const k in attrs) el.setAttribute(k, attrs[k]);
   return el;
 }
+
+// CORREÇÃO DA VARIÁVEL: Vincula as linhas corretamente ao zoomContainer global
 function svgLayerDrawLine(p1, p2, isEliminated) {
+  if(!zoomContainer) return;
   zoomContainer.appendChild(elNS('line', { x1: p1[0], y1: p1[1], x2: p2[0], y2: p2[1], stroke: isEliminated ? '#1c1c20' : '#2d2d34', 'stroke-width': 1, 'stroke-dasharray': '2,2' }));
 }
 
@@ -491,8 +504,12 @@ async function load() {
     const data = await res.json();
     state.rounds = data.rounds || [];
     state.leaves = data.leaves || [];
+    
+    // Configura o sistema D3 antes de renderizar os elementos visuais
+    initZoomSystem();
     render();
-    centerBracketInitially(); // Seta o enquadramento de tela perfeito inicial
+    centerBracketInitially(); 
+    
     if (state.selectedMatchId) renderInteractivePanel();
     if (statusText) statusText.textContent = '✓ Sincronizado';
   } catch (e) {
@@ -508,5 +525,6 @@ document.addEventListener('click', (e) => {
   closePanel();
 });
 
-load();
+// Inicialização segura disparada após o carregamento do DOM
+document.addEventListener('DOMContentLoaded', load);
 setInterval(load, 60000);
