@@ -5,24 +5,31 @@
   padding: 0;
 }
 
-body {
+html, body {
   background: #060607;
   color: #f3f4f6;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   overflow: hidden;
-  height: 100vh;
+  height: 100%;
   margin: 0;
   -webkit-font-smoothing: antialiased;
+  /* evita bounce/zoom acidental em touch */
+  overscroll-behavior: none;
+  touch-action: manipulation;
 }
+
 @keyframes pulse {
-  0% { opacity: 0.6; }
-  50% { opacity: 1; }
-  100% { opacity: 0.6; }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 /* Aplica efeito pulsante no contorno do nó do SVG */
-.highlighted-node-pulse circle {
+.highlighted-node-pulse circle:first-child {
   animation: svgPulse 2s infinite ease-in-out;
+}
+.highlighted-halo {
+  animation: haloSpin 6s linear infinite, haloPulse 2s ease-in-out infinite;
+  transform-origin: center;
 }
 
 @keyframes svgPulse {
@@ -30,16 +37,111 @@ body {
   50% { stroke-width: 4.5px; stroke: #ef4444; filter: drop-shadow(0px 0px 8px #ef4444); }
   100% { stroke-width: 2px; stroke: #cc9a18; }
 }
+@keyframes haloSpin {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -24; }
+}
+@keyframes haloPulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.9; }
+}
 
 /* ===== LAYOUT PRINCIPAL ===== */
 #app {
   position: relative;
   width: 100vw;
   height: 100vh;
+  height: 100dvh; /* altura real em navegadores mobile, sem barra de endereço cortando */
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===== BANNER SUPERIOR (AO VIVO / PRÓXIMO JOGO) ===== */
+#top-live-banner {
+  position: relative;
+  z-index: 60;
+  flex: 0 0 auto;
+  width: 100%;
+}
+.banner-inner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  font-family: inherit;
+  flex-wrap: wrap;
+  text-align: center;
+}
+.banner-live {
+  background: linear-gradient(90deg, #591010, #0c0c0e);
+  border-bottom: 2px solid #ef4444;
+}
+.banner-next {
+  background: #09090b;
+  border-bottom: 1px solid #cc9a18;
+}
+.banner-tag {
+  font-size: 10px;
+  font-weight: bold;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.banner-tag-live {
+  background: #ef4444;
+  color: #fff;
+  animation: pulse 1.5s infinite;
+}
+.banner-tag-next {
+  color: #cc9a18;
+  border: 1px solid #cc9a18;
+  letter-spacing: 0.5px;
+}
+.banner-match {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #fff;
+  font-weight: bold;
+  font-size: 14px;
+}
+.banner-flag {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+}
+.banner-team {
+  white-space: nowrap;
+}
+.banner-score {
+  background: #18181b;
+  border: 1px solid #2d2d34;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 16px;
+  color: #cc9a18;
+  font-weight: 900;
+}
+.banner-match-text {
+  color: #e4e4e7;
+  font-size: 13px;
+  font-weight: 500;
+}
+.banner-date {
+  color: #cc9a18;
+  font-weight: bold;
+  margin-left: 8px;
 }
 
 /* ===== SVG LAYER ===== */
+#bracket-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
 #bracket-layer {
   position: absolute;
   top: 0;
@@ -79,6 +181,7 @@ image {
   opacity: 0;
   z-index: 100;
   font-family: inherit;
+  max-width: 220px;
 }
 #tooltip.visible {
   opacity: 1;
@@ -104,18 +207,31 @@ image {
   animation: pulse 1.2s infinite;
 }
 
-/* ===== PANEL (LATERIAL FIXO PREMIUM) ===== */
+/* ===== BACKDROP DO PAINEL (SÓ ATIVO NO MOBILE) ===== */
+body.panel-open::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0);
+  z-index: 98;
+  pointer-events: none;
+}
+
+/* ===== PANEL (LATERAL FIXO PREMIUM) ===== */
 #panel {
   position: fixed;
   top: 32px;
   right: 32px;
   width: 300px;
-  background: rgba(11, 11, 13, 0.75);
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  background: rgba(11, 11, 13, 0.9);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 16px;
-  padding: 20px;
+  padding: 4px;
   color: #f3f4f6;
   pointer-events: none;
   z-index: 99;
@@ -127,6 +243,7 @@ image {
 #panel.visible {
   opacity: 1;
   transform: translateX(0);
+  pointer-events: auto;
 }
 #panel .match-title {
   font-weight: 700;
@@ -158,7 +275,7 @@ image {
 /* ===== STATUS & BOTÃO REFRESH ===== */
 #status {
   position: absolute;
-  bottom: 24px;
+  bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(18, 18, 20, 0.6);
@@ -174,6 +291,7 @@ image {
   display: flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
 }
 #status button {
   background: none;
@@ -184,14 +302,99 @@ image {
   margin-left: 8px;
   font-size: 12px;
   transition: color 0.2s ease, text-shadow 0.2s ease;
+  padding: 4px;
 }
 #status button:hover {
   color: #f0c23d;
   text-shadow: 0 0 8px rgba(240, 194, 61, 0.5);
 }
 
-/* ===== ANIMAÇÕES ===== */
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+/* ============================================================
+   OTIMIZAÇÃO MOBILE
+   ============================================================ */
+
+/* Tablets e celulares grandes */
+@media (max-width: 768px) {
+  .banner-inner {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+  .banner-match {
+    font-size: 12px;
+    gap: 6px;
+  }
+  .banner-flag {
+    width: 20px;
+    height: 20px;
+  }
+  .banner-score {
+    font-size: 14px;
+    padding: 3px 9px;
+  }
+  .banner-match-text {
+    font-size: 12px;
+  }
+  .banner-tag {
+    font-size: 9px;
+  }
+
+  /* O painel vira uma folha inferior (bottom sheet) em vez de flutuar à direita */
+  #panel {
+    top: auto;
+    bottom: 0;
+    right: 0;
+    left: 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: 70vh;
+    border-radius: 18px 18px 0 0;
+    transform: translateY(100%);
+    padding: 6px;
+  }
+  #panel.visible {
+    transform: translateY(0);
+  }
+
+  /* Escurece o fundo quando o painel de detalhes está aberto */
+  body.panel-open::after {
+    background: rgba(0, 0, 0, 0.55);
+    pointer-events: auto;
+  }
+
+  #status {
+    bottom: 10px;
+    font-size: 11px;
+    padding: 6px 14px;
+  }
+
+  #tooltip {
+    display: none; /* hover não existe em touch; os detalhes já abrem pelo toque no nó */
+  }
+}
+
+/* Celulares pequenos */
+@media (max-width: 420px) {
+  .banner-match {
+    font-size: 11px;
+  }
+  .banner-score {
+    font-size: 13px;
+    padding: 2px 8px;
+  }
+  #status {
+    font-size: 10px;
+    padding: 5px 12px;
+  }
+}
+
+/* Tela curta (paisagem em celular) — reduz banner e status para sobrar espaço pro bracket */
+@media (max-height: 480px) {
+  .banner-inner {
+    padding: 4px 10px;
+  }
+  #status {
+    bottom: 6px;
+    padding: 4px 10px;
+    font-size: 10px;
+  }
 }
